@@ -126,7 +126,7 @@
             
             <span class="tag">
                 
-                <a href="/tags/面试" style=color:#00bcd4>
+                <a href="/tags/面试" style=color:#1bccbc>
                     面试
                 </a>
             </span>
@@ -3328,6 +3328,244 @@ public void actor2(II_Result r)&#123;
 &#125;
 </code></pre>
 <p><strong>解决办法</strong>：在前面加上<code>volatile</code></p>
+<p><span style = "color:red"><strong>说一下线程池的核心参数</strong></span></p>
+<p>为什么要创建线程池 因为每次创建线程的时候就要占用一定的内存空间 无限创建线程回浪费内存<del>严重会导致内存溢出</del><br>CPU有限的同一时刻只能同时处理一个线程 大量线程来的话就没有线程权 会造成线程等待 造成大量线程在之间切换也会导致性能变慢</p>
+<pre><code class="java">在这个例子中，我们创建了一个线程池，核心线程数为5，最大线程数为10，如果线程池中的线程数大于核心线程数，则空闲线程在60秒后会被终止。工作队列使用ArrayBlockingQueue，其容量为100。
+
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+
+public class ThreadPoolExample &#123;
+    public static void main(String[] args) &#123;
+        // 核心线程数
+        int corePoolSize = 5;
+        // 最大线程数 = （核心线程 + 救急线程的最大数目）
+        int maximumPoolSize = 10;
+        // 线程池中超过 corePoolSize 数量的空闲线程最大存活时间
+        long keepAliveTime = 60L;
+        // 时间单位 - 救急线程的生存时间单位，如秒、毫秒等
+        TimeUnit unit = TimeUnit.SECONDS;
+        // 工作队列，用于存放提交的任务 当没有空闲核心线程时，新来任务会加入到此队列排队，队列满会创建救急线程执行任务
+        ArrayBlockingQueue&lt;Runnable&gt; workQueue = new ArrayBlockingQueue&lt;&gt;(100);
+        // 线程工厂 - 可以定制线程对象的创建，例如设置线程名字、是否是守护线程等
+        ThreadFactory threadFactory = new ThreadFactory;
+        // 拒绝策略 - 当所有线程豆繁忙，workQueue也繁忙时，会触发拒绝策略
+        RejectedExecutionHandler handler = new RejectedExecutionHandler;
+        
+        // 创建线程池
+        ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(
+                corePoolSize,
+                maximumPoolSize,
+                keepAliveTime,
+                unit,
+                workQueue
+        );
+
+        // 示例：向线程池提交任务  threadPoolExecutor.submit()/.execute()
+        for (int i = 0; i &lt; 20; i++) &#123;
+            int taskNumber = i;
+            threadPoolExecutor.execute(() -&gt; &#123;
+                System.out.println(&quot;Executing task &quot; + taskNumber);
+                // 模拟任务执行时间
+                try &#123;
+                    Thread.sleep(1000);
+                &#125; catch (InterruptedException e) &#123;
+                    e.printStackTrace();
+                &#125;
+            &#125;);
+        &#125;
+
+        // 关闭线程池
+        threadPoolExecutor.shutdown();
+    &#125;
+&#125;
+</code></pre>
+<p>一开始new的时候没有 是空的。先当一个任务提交给线程池时，线程池首先检查当前运行的线程数是否达到核心线程数。如果没有达到核心线程数，线程池会创建一个新的线程来执行任务。如果已经达到核心线程数，线程池会将任务放入工作队列中等待执行。如果工作队列满了，并且当前运行的线程数小于最大线程数，，线程池会创建新的线程来执行任务。如果工作队列满了，并且当前运行的线程数等于最大线程数，线程池会根据<strong>拒绝策略</strong></p>
+<ul>
+<li><u>丢弃任务抛出异常</u></li>
+<li><u>丢弃任务不抛弃异常</u></li>
+<li><u>丢弃队列最前面的任务,然后重新提交被拒绝的任务、</u></li>
+<li><u>由主线程处理该任务来处理无法执行的任务</u>。【线程池无法起到异步问题】<ul>
+<li>问题：想继续异步且不丢弃任务怎么办？</li>
+<li>把这个业务先存到别的地方 ↓↓↓</li>
+</ul>
+</li>
+<li><u>自定义拒绝策略</u> 自己写实现类实现拒绝策略 可以先存到mysql到时候再慢慢搞</li>
+</ul>
+<p><span style = "color:red"><strong>线程池中有哪些常见的阻塞队列</strong></span></p>
+<p><u>线程工厂可以设置创建的属性</u>：<br><strong>守护线程</strong>：主线程(main)一天不死 守护线程不死 [同生共死]<br><strong>非守护线程</strong>：new一个就是 [不是同生共死]</p>
+<p><u>workQueue - 阻塞队列常用的队列</u>：当没有空闲核心线程时，新来任务会加入到此队列排队，队列满会创建救急线程执行任务</p>
+<ol>
+<li><strong>ArrayBlockingQueue</strong>： 基于数组结构的有界阻塞队列，此队列按照先进先出（FIFO）的原则对元素进行排序。创建时需要指定容量。【底层是数组 随机读写的 **时间复杂度O(1)**】<ul>
+<li>开辟新空间创建新数组 把旧数组的数据迁移过去   <strong>new ArrayList</strong>为空 需要add才可以 <u>扩容是+10 取1.5倍</u></li>
+<li>高并发不会超过某个值 数组不会涉及到扩容 性能会好一些【比较稳定能预估】</li>
+<li>new的时候不用指定长度</li>
+</ul>
+</li>
+<li><strong>LinkedBlockingQueue</strong>： 基于链表结构的有界阻塞队列（如果不指定容量，则默认为<code>Integer.MAX_VALUE</code>，即视为无界）。按照先进先出的原则排序元素。【随机读写的 <strong>时间复杂度O(n)</strong> 随机读写快  查询慢 是通过二分查找定位到下标元素(通过下标访问数组和链表) 只会走一次二分查找】<ul>
+<li>读中间的慢 读头尾快</li>
+<li>新增元素不涉及到数组的迁移</li>
+<li>一般情况下高并发推荐使用，因为队列<del>高级数据结构</del>(可以用数组和链表的实现 由于底层数据结构不同)的特性是先进先出，链表不涉及到数组的扩容 末尾的最快是O(1)【不稳定】</li>
+<li>new的时候可指定长度是最大链表的长度               </li>
+<li>不可指定长度 [有界队列&amp;无界队列] → 可能产生JVM的OOM</li>
+</ul>
+</li>
+<li>DelayedWorkQueue：是一个优先级队列，它可以保证每次出队的任务都是当前队列中时间最靠前的</li>
+<li>SynchronousQueue：不存储元素的阻塞队列，每个插入操作都必须等待一个移出操作</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th align="center">ArrayBlockingQueue</th>
+<th align="center"><span style = "color:red">LinkedBlockingQueue<del>不给值默认最大值</del></span></th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center">强制有界</td>
+<td align="center">默认无界，支持有界</td>
+</tr>
+<tr>
+<td align="center">底层是数组</td>
+<td align="center">底层是链表</td>
+</tr>
+<tr>
+<td align="center">提前初始化Node数组</td>
+<td align="center">是懒惰的，创建节点的时候添加数据</td>
+</tr>
+<tr>
+<td align="center">Node需要是提前创建好的</td>
+<td align="center">入队会生成新Node</td>
+</tr>
+<tr>
+<td align="center">一把锁</td>
+<td align="center">两把锁(头尾)<del>可以一边入队,一边出队</del></td>
+</tr>
+</tbody></table>
+<p><span style = "color:red"><strong>如何确定核心线程数</strong></span></p>
+<blockquote>
+<p>① 高并发、任务执行时间短 → (CPU核数 + 1)，减少线程上下文的切换<br>② 并发不高、任务执行时间长</p>
+<ul>
+<li><strong>IO密集型任务 → (CPU核数 * 2 + 1)</strong></li>
+<li>计算密集型任务 → (CPU核数 + 1)</li>
+</ul>
+<p>③ <strong>并发高、业务执行时间长</strong>，解决这种类型任务的关键不在于线程池而在于整体架构的设计，看看这些业务里面某些数据是否能做缓存是第一步，增加服务器是第二步，至于线程池的设置参考②</p>
+</blockquote>
+<ul>
+<li>IO密集型任务：文件读写、DB读写、网络请求等                            <span style = "color:blue"><strong>核心线程数大小设置为2N+1</strong></span></li>
+<li>CPU密集型任务：计算型代码、Bitmap转换、Gson转换等            <span style = "color:blue"><strong>核心线程数大小设置为N+1</strong></span></li>
+</ul>
+<pre><code class="java">// 查看机器的CPU核数
+public static void main(String[] args)&#123;
+    // 查看机器的CPU核数
+    System.out.println(Runtime.getRuntime().avaliableProcessors());
+&#125;
+</code></pre>
+<p><span style = "color:red"><strong>线程池的种类有哪些</strong></span></p>
+<p>在<code>java.util.concurrent.Executors</code>类中提供了大量创建线程池的静态方法，常见的有四种</p>
+<h6 id="①-创建使用固定线程数的线程池"><a href="#①-创建使用固定线程数的线程池" class="headerlink" title="① 创建使用固定线程数的线程池"></a>① 创建使用固定线程数的线程池</h6><p><span style = "color:blue">适用于任务已知，相对耗时的任务</span></p>
+<pre><code class="java">public static ExecutorService newFixedThreadPool(int nThreads)&#123;
+    return new ThreadPoolExecutor(nThreads, nThreads,0L,TimeUnit.MILLISECONDS.new LinkedBlockingQueue&lt;Runnable&gt;)
+&#125;
+</code></pre>
+<ul>
+<li>核心线程数与最大线程数一样，没有<code>救急线程 = 最大线程数 - 核心线程数</code></li>
+<li>阻塞队列是LinkedBlockingQueue，最大容量为Integer.MAX_VALUE</li>
+</ul>
+<h6 id="②-单线程化的线程池它只会用唯一的工作线程来执行任务，保证所有任务按照指定顺序-FIFO-执行→-先进先出"><a href="#②-单线程化的线程池它只会用唯一的工作线程来执行任务，保证所有任务按照指定顺序-FIFO-执行→-先进先出" class="headerlink" title="② 单线程化的线程池它只会用唯一的工作线程来执行任务，保证所有任务按照指定顺序(FIFO)执行→[先进先出]"></a>② 单线程化的线程池<del>它只会用唯一的工作线程来执行任务，保证所有任务按照指定顺序(FIFO)执行→[先进先出]</del></h6><p><span style = "color:blue">适用于按照顺序执行的任务</span></p>
+<pre><code class="java">public static ExecutorService newSingleThreadExecutor()&#123;
+    return new FinalizableDelegatedExecutorService(new ThreadPoolExecutor(1,1,0L,TimeUnit.MILLISECONDS,new LinkedBlockingQueue&lt;Runnable&gt;()));
+&#125;
+</code></pre>
+<ul>
+<li>核心线程数和最大线程数都是1</li>
+<li>阻塞队列是<code>LinkedBlockingQueue</code>，最大容量为<code>Integer.MAX_VALUE</code></li>
+</ul>
+<h6 id="③-可缓存线程池"><a href="#③-可缓存线程池" class="headerlink" title="③ 可缓存线程池"></a>③ 可缓存线程池</h6><pre><code class="java">public static ExecutorService newCachedThreadPool()&#123;
+    return new ThreadPoolExecutor(0, Integer.MAX_VALUE,60L,TimeUnit.SECONDS,new SynchronousQueue&lt;Runnable&gt;());
+&#125;
+</code></pre>
+<ul>
+<li>核心线程数为0</li>
+<li>最大线程数是<code>Integer.MAX_VALUE</code></li>
+<li>阻塞队列是<code>SynchronousQueue</code>: 不存储元素的阻塞队列，每个插入操作都必须等待一个移出操作</li>
+</ul>
+<h6 id="④-提供了-延迟-和-周期执行-功能的ThreadPoolExecutor"><a href="#④-提供了-延迟-和-周期执行-功能的ThreadPoolExecutor" class="headerlink" title="④ 提供了 延迟 和 周期执行 功能的ThreadPoolExecutor"></a>④ 提供了 <code>延迟</code> 和 <code>周期执行</code> 功能的ThreadPoolExecutor</h6><pre><code class="java">public ScheduledThreadPoolExecutor(int corePoolSize)&#123;
+    super(corePoolSize, Integer.MAX_VALUE,0,NANOSECONDS,new DelayedWorkQueue());
+&#125;
+</code></pre>
+<p><span style = "color:red"><strong>为什么不建议使用Executors创建线程池？</strong></span></p>
+<p>参考阿里开发手册</p>
+<pre><code class="java">【强制】 线程池不允许使用Executors去创建，而是通过ThreadPoolExecutor的方式，这样的处理方式让写的同学更加明确线程池的运行规则，规避资源耗尽的风险。
+说明：Executors返回的线程池对象的弊端如下：
+1. FixedThreadPool 和 SingleThreadPool：
+允许的请求队列长度为 Integer.MAX_VALUE,可能会堆积大量的请求，从而导致OOM
+2. CachedThreadPool：
+允许的创建线程数量为 Integer.MAX_VALUE,可能会创建大量的线程，从而导致OOM
+</code></pre>
+<p><span style = "color:red"><strong>线程池的使用场景①：ES数据批量导入</strong></span></p>
+<h6 id="CountDownLatch"><a href="#CountDownLatch" class="headerlink" title="CountDownLatch"></a>CountDownLatch</h6><p>CountDownLatch(闭锁&#x2F;倒计时锁)用来进行线程同步协作，等待所有线程完成倒计时时(一个或多个线程，等待其他多个线程完成某件事情之后才能执行)</p>
+<ul>
+<li>其中构造参数用来初始化等待计数值</li>
+<li><code>await()</code>用来等待计数归零</li>
+<li><code>countDown()</code>用来让计数减一</li>
+</ul>
+<h6 id="多线程使用场景一-es数据批量导入"><a href="#多线程使用场景一-es数据批量导入" class="headerlink" title="多线程使用场景一 (es数据批量导入)"></a>多线程使用场景一 (es数据批量导入)</h6><p>在我们项目上线之前，我们需要把数据库中的数据一次性的同步到es索引库中，但是当时的数据好像是1000万左右一次性读取数据肯定不行(oom异常)，当时我就想到可以使用线程池的方式导入，利用CountDownLatch来控制就能避免一次性加载过多，防止内存溢出</p>
+<p>DB(一千万) → 线程池(CountDownLatch) → Elasticearch</p>
+<pre><code class="java">       批量导入  →  查询总条数   →       DB
+                      ↓               ↑          批量导入到ES中     →   ES
+(固定每页2000条)        计算总页数            ↑  (countDownLatch.countDown())
+                        ↓               ↑                ↑
+(总页数)         CountDownLatch        ↑                ↑
+                        ↓               ↑                ↑
+                分页查询文章数据 → [查询当前页的文章 → 创建任务批量导入ES → 提交到线程池执行]循环
+                                             (文章列表, countDownLatch)
+                                                          ↓
+                                                countDownLatch.await()
+</code></pre>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/a8e33cd1bf93eca7f789f20cee1a67770b426f68/%E7%BA%BF%E7%A8%8B%E6%B1%A0%E7%9A%84%E4%BD%BF%E7%94%A8%E5%9C%BA%E6%99%AF-CountDownLatch%E7%94%A8ES%E6%89%B9%E9%87%8F.png"></p>
+<p><span style = "color:red"><strong>线程池的使用场景②：数据汇总</strong></span></p>
+<ul>
+<li>在一个电商网站中，用户下单之后，需要查询数据，数据包含了三部分：订单信息、包含的商品、物流信息;这三块信息都在不同的微服务中进行实现的，我们如何完成这个业务呢?<ul>
+<li>在实际开发的过程中，难免需要调用多个接口来汇总数据，如果所有接口(或部分接口)的没有依赖关系，就可以使用线程池+future来提升性能<br>[<u>统计的图文发布量、点赞数量、收藏数量、评论数量若不在同一台微服务下 或者 部分没有依赖关系</u>]</li>
+</ul>
+</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/b9ec7c6d685bab18893fbfa3b6637c48f3384ecf/%E7%BA%BF%E7%A8%8B%E6%B1%A0%E7%9A%84%E4%BD%BF%E7%94%A8%E5%9C%BA%E6%99%AF%E2%80%94%E6%95%B0%E6%8D%AE%E6%B1%87%E6%80%BB.png"></p>
+<p><span style = "color:red"><strong>线程池的使用场景③：异步调用</strong></span></p>
+<p>为了避免下一级方法影响上一级方法(性能考虑)，可使用<strong>异步线程调用</strong>下一个方法(不需要下一级方法返回值)，可以提升方法相应时间</p>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/8b9788570956b65f8073f31b82bada34a8ddb799/%E7%BA%BF%E7%A8%8B%E6%B1%A0%E7%9A%84%E4%BD%BF%E7%94%A8%E5%9C%BA%E6%99%AF%E2%80%94%E2%80%94%E5%BC%82%E6%AD%A5%E8%B0%83%E7%94%A8.png"></p>
+<p><span style = "color:red"><strong>如何控制某个方法允许并发访问线程的数量</strong></span></p>
+<p>Semaphore信号量，是JUC包下的一个工具类，底层是AQS，我们可以通过其限制执行的线程数量<br><strong>适用场景</strong>：<br>通常用于那些资源有明确访问数量限制的场景，常用于限流</p>
+<h6 id="Semaphore使用步骤"><a href="#Semaphore使用步骤" class="headerlink" title="Semaphore使用步骤"></a>Semaphore使用步骤</h6><ul>
+<li>创建Semaphore对象，可以给一个容器</li>
+<li>semaphore.acquire()：请求一个信号量，这时候的信号量个数 -1 (<u>一旦没有可使用的信号量，也即信号量个数变为负数时，再次请求的时候就会阻塞，直到其他线程释放了信号量</u>)</li>
+<li>semaphore.release()：释放一个信号量，此时信号量个数 +1</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/76cde79a53b36086d940f2874f8aa7ffd93ce6ef/%E5%A6%82%E4%BD%95%E6%8E%A7%E5%88%B6%E6%9F%90%E4%B8%AA%E6%96%B9%E6%B3%95%E5%85%81%E8%AE%B8%E5%B9%B6%E5%8F%91%E8%AE%BF%E9%97%AE%E7%BA%BF%E7%A8%8B%E7%9A%84%E6%95%B0%E9%87%8F.png"></p>
+<p><span style = "color:red"><strong>谈一谈你对ThreadLocal的理解</strong></span></p>
+<blockquote>
+<ul>
+<li>ThreadLocal 可以实现【资源对象】的线程隔离，让每个线程各用各的【资源对象】避免争用引发的线程安全问题</li>
+<li>ThreadLocal 同时实现了线程内的资源共享</li>
+<li>每个线程内有一个 ThreadLocalMap 类型的成员变量，用来存储资源对象<ul>
+<li>调用 set 方法，就是以 ThreadLocal 自己作为 key，资源对象作为 value，放入当前线<br>程的 ThreadLocalMap 集合中</li>
+<li>调用 get 方法，就是以 ThreadLocal 自己作为 key，到当前线程中査找关联的资源值</li>
+<li>调用remove 方法，就是以 ThreadLocal 自己作为 key，移除当前线程关联的资源值</li>
+</ul>
+</li>
+<li>ThreadLocal内存泄漏问题ThreadLocalMap 中的key是弱引用，值为强引用; key会被Gc释放内存，关联 value的内存并不会释放。建议主动remove 释放 key，value</li>
+</ul>
+</blockquote>
+<h6 id="ThreadLocal概述"><a href="#ThreadLocal概述" class="headerlink" title="ThreadLocal概述"></a>ThreadLocal概述</h6><p>ThreadLocal是多线程中对于解决线程安全的一个操作类，它会<strong>为每个线程都分配一个独立的线程副本</strong>从而解决了变量并发访问冲突的问题。ThreadLocal同时实现了线程内的资源共享</p>
+<p>案例：使用JDBC操作数据库时，会将每一个线程的Connection放入各自的ThreadLocal中，从而保证每个线程都在各自的 Connection 上进行数据库的操作，避免A线程关闭了B线程的连接。</p>
+<p><strong>ThreadLocal基本使用</strong></p>
+<ul>
+<li>set(value) 设置值</li>
+<li>get() 获取值</li>
+<li>remove() 清除值</li>
+</ul>
+<h6 id="ThreadLocal的实现原理-amp-源码解析"><a href="#ThreadLocal的实现原理-amp-源码解析" class="headerlink" title="ThreadLocal的实现原理 &amp; 源码解析"></a>ThreadLocal的实现原理 &amp; 源码解析</h6><p>ThreadLocal本质来说就是一个线程内部存储类，从而让多个线程只操作自己内部的值，从而实现线程数据隔离<br><img src="https://raw.githubusercontent.com/P-luminary/images/4471cf0ff69616926ff6fab93392d3d9fa5aba32/%E8%B0%88%E4%B8%80%E8%B0%88%E4%BD%A0%E5%AF%B9ThreadLocal%E7%9A%84%E7%90%86%E8%A7%A3.png"></p>
 
     </div>
 

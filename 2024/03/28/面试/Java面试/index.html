@@ -126,7 +126,7 @@
             
             <span class="tag">
                 
-                <a href="/tags/后端" style=color:#ff7d73>
+                <a href="/tags/后端" style=color:#1bccbc>
                     后端
                 </a>
             </span>
@@ -2987,6 +2987,84 @@ t2-itcast
 <li>终止（Terminated）：线程执行完成或因异常而终止。</li>
 </ul>
 <h6 id="怎么把线程杀死-终止"><a href="#怎么把线程杀死-终止" class="headerlink" title="怎么把线程杀死 终止"></a>怎么把线程杀死 终止</h6><p><strong>stop</strong>()方法[暴力方法]    <strong>interrupt</strong>()方法[优雅关闭线程]    正常回收</p>
+<h4 id="乐观锁和悲观锁的区别"><a href="#乐观锁和悲观锁的区别" class="headerlink" title="乐观锁和悲观锁的区别"></a>乐观锁和悲观锁的区别</h4><p>乐观锁：读多写少 线程执行时间相差较大  并发不太激烈</p>
+<p>悲观锁：写多读少 线程执行时间相差不大 竞争激烈 并发锁多</p>
+<p>加锁的时机不一样，<br>悲观锁：没改数据的时候先加锁 比较明显利用底层操作系统api实现<br>乐观锁：在改数据的时候才加锁 依靠底层的硬件</p>
+<p><strong>java层面</strong>：<code>synchronized  ReentrantLock</code></p>
+<p><strong>数据库层面</strong>：<br>悲观锁：select for update是mysql的的实现<br>乐观锁：JUC Java Util Concurrent）是Java并发工具包</p>
+<blockquote>
+<p><code>SELECT ... FOR UPDATE</code>：这个语句在读取记录时会锁定这些记录，直到事务提交或回滚。其他的事务不能更新这些锁定的记录，这是悲观锁的一个典型实现</p>
+</blockquote>
+<p>乐观锁要读取目前旧的值再将新设置的值以及旧的值比较 如果相同 就把新的值更新 如果不相同 就把旧的值重新提取 因为在这期间有人读取了这个数据跟我之前不一样(底层api 要调用两个 一个旧的值 一个新的值)。一般乐观锁是结合自旋 类于while(true)直到读到为止 <code>要设计次数后再报错</code></p>
+<p>要更新数据库某个值 把旧的值读出来 想更新银行里的余额<br>这是<strong>典型的ABA问题</strong>：<u>要用<strong>时间戳</strong>或<strong>自增版本号</strong>去做</u></p>
+<h4 id="Stream流的使用及常用API"><a href="#Stream流的使用及常用API" class="headerlink" title="Stream流的使用及常用API"></a>Stream流的使用及常用API</h4><p>Stream是Java 8中引入的一种新特性，用于简化数据处理和操作。它可以用来解决集合循环遍历处理的问题。在此之前用循环来代替</p>
+<blockquote>
+<h3 id="基础Stream操作"><a href="#基础Stream操作" class="headerlink" title="基础Stream操作"></a>基础Stream操作</h3><ul>
+<li><code>stream()</code>: 为集合创建串行流。</li>
+<li><code>parallelStream()</code>: 为集合创建并行流。</li>
+<li><code>forEach</code>: 对每个元素执行操作。</li>
+<li><code>map</code>: 将每个元素映射到对应的结果。</li>
+<li><code>filter</code>: 过滤出满足条件的元素。</li>
+<li><code>limit</code>: 限制流的大小。</li>
+<li><code>skip</code>: 跳过流中的前n个元素。</li>
+<li><code>sorted</code>: 对流进行排序。</li>
+</ul>
+<h3 id="终端操作"><a href="#终端操作" class="headerlink" title="终端操作"></a>终端操作</h3><ul>
+<li><code>collect</code>: 将流转换为其他形式，比如列表、集合或Map。</li>
+<li><code>reduce</code>: 通过一个起始值，反复利用BinaryOperator来处理和累积元素，返回一个值。</li>
+<li><code>count</code>: 返回流中元素的数量。</li>
+<li><code>min</code> &#x2F; <code>max</code>: 找到流中的最小&#x2F;最大值。</li>
+<li><code>anyMatch</code>: 流中是否有一个元素匹配给定的谓词。</li>
+<li><code>allMatch</code>: 流中的所有元素是否都匹配给定的谓词。</li>
+<li><code>noneMatch</code>: 流中没有任何元素匹配给定的谓词。</li>
+<li><code>findFirst</code>: 返回第一个元素。</li>
+<li><code>findAny</code>: 返回当前流中的任意元素。</li>
+</ul>
+</blockquote>
+<h4 id="项目中具体用到哪些设计模式"><a href="#项目中具体用到哪些设计模式" class="headerlink" title="项目中具体用到哪些设计模式"></a>项目中具体用到哪些<span style = "color:red">设计模式</span></h4><p><del><strong>单例模式</strong>：确保一个类只有一个实例，例如配置文件管理器。</del>[<u>Spring原本设计好的</u>]<br>**<u>工厂模式</u>**：创建对象时无需指定具体的类，例如日志工厂。<br><strong>观察者模式</strong>：当一个对象状态发生改变时，所有依赖于它的对象都得到通知并自动更新，例如事件监听。<br>**<u>策略模式</u>**：定义一系列算法，将每个算法封装起来，并使它们可以互换，例如支付策略。<br><strong>模板方法模式</strong>：在项目中，我有一些具有相同操作步骤但具体实现不同的算法，我使用了模板方法模式来定义这些步骤的骨架，将具体的步骤实现留给子类。任链模式的目的是将请求的发送者和接收者解耦，从而使得多个对象都有机会处理请求，将这些对象连成一条链，并沿着这条链传递请求，直到有一个对象处理它为止。<br><strong>责任链模式</strong>：它允许将请求沿着处理者链进行发送。收到请求后，每个处理者都有机会对请求进行处理，或者将其传递给链上的下一个处理者。这样，请求就能在一系列处理者中传递，直到有一个处理者对其进行处理为止。    1.<u>递归方式</u> ：在递归模式中，每个处理者内部调用下一个处理者的处理方法。如果当前处理者无法处理请求，它会直接调用下一个处理者的处理方法。这种方式通常是通过递归调用来实现的<br>2.<u>迭代模式</u>：在迭代模式中，处理者链被构建为一个线性结构，每个处理者都有一个指向下一个处理者的引用。请求从链的第一个处理者开始，依次传递给下一个处理者，直到找到能够处理该请求的处理者为止。这种方式通常是通过循环迭代来实现的<br><strong>代理模式</strong>：为了控制对远程服务的访问，我使用了代理模式。代理负责处理所有与服务对象的交互，并在必要时进行延迟加载。</p>
+<p>在我的项目中结合<strong>工厂模式</strong>和<strong>策略模式</strong>来设计登录接口时，我们可以将登录验证的逻辑抽象为一个策略接口，并为每种登录方式（如：用户名密码登录、手机验证码登录、社交账号登录等）实现具体的策略类。工厂类则负责创建并管理这些策略对象</p>
+<h6 id="思考一个问题：哪些方式创建单例模式？"><a href="#思考一个问题：哪些方式创建单例模式？" class="headerlink" title="思考一个问题：哪些方式创建单例模式？"></a>思考一个问题：哪些方式创建单例模式？</h6><h4 id="MySQL支持四种隔离级别"><a href="#MySQL支持四种隔离级别" class="headerlink" title="MySQL支持四种隔离级别"></a><span style = "color:red"><u>MySQL支持四种隔离级别</u></span></h4><p>第一个是<strong>读未提交</strong>(readuncomm itted)它解决不了刚才提出的所有问题，一般项目中也不用这个。存在脏读问题  可解决不可重复读 幻读<br>第二个是<strong>读已提交</strong>(readcomm ited)它能解决脏读的问题的，但是解决不了不可重复读和幻读。<br>第三个是<strong>可重复读</strong>(repeatable read)它能解决脏读和不可重复读，但是解决不了幻读[解决了一部分]，这个也是mysql默认的隔离级别。<br>第四个是<strong>串行化</strong>(serializable)它可以解决刚才提出来的所有问题，但是由于让是事务串行执行的，性能比较低。<br>串行化里的读也要加锁 表锁：整个表上锁            行锁：只对一行加锁</p>
+<h6 id="什么时候上行锁-x2F-表锁？"><a href="#什么时候上行锁-x2F-表锁？" class="headerlink" title="什么时候上行锁&#x2F;表锁？"></a>什么时候上行锁&#x2F;表锁？</h6><p>insert不带查询筛选条件  上行锁<del>底层是索引，b+树底层叶子</del><br>update看where后面的条件 带索引加行锁<del>构建b+树</del> 不带索引的加表锁<br>表锁的速度比行锁速度快</p>
+<p>MVCC底层是多版本并发控制 但底层并不怎么了解</p>
+<h4 id="深拷贝和浅拷贝的区别？"><a href="#深拷贝和浅拷贝的区别？" class="headerlink" title="深拷贝和浅拷贝的区别？"></a>深拷贝和浅拷贝的区别？</h4><p><strong>浅拷贝</strong>：只复制对象的基本数据类型和引用类型地址，不复制引用类型指向的对象。如果原对象和浅拷贝对象中的一个改变了引用类型，另一个也会受到影响。旧对象改变新对象也会改变。<br><strong>深拷贝</strong>：复制对象的所有字段，包括基本数据类型和引用类型指向的对象。原对象和深拷贝对象之间不会相互影响。旧对象改变新对象不会改变<br>  Java是值传递 </p>
+<h6 id="如何实现深拷贝？数组不需要重写【体现了原型设计模式】"><a href="#如何实现深拷贝？数组不需要重写【体现了原型设计模式】" class="headerlink" title="如何实现深拷贝？数组不需要重写【体现了原型设计模式】"></a>如何实现深拷贝？<del>数组不需要重写</del>【体现了<code>原型设计模式</code>】</h6><ul>
+<li><p>实现<strong>Cloneable接口</strong>并重写<strong>clone</strong>方法 会调用构造方法</p>
+<p>这是最常见的实现深拷贝的方法。首先，你的类需要实现<code>Cloneable</code>接口，然后重写<code>clone()</code>方法<del>构造新对象的过程</del>，并在该方法中调用<code>super.clone()</code>，同时递归地克隆所有引用类型的字段。[如果里面有多层嵌套复杂对象 在每层都要实现Cloneable接口一直重写到基本数据类型的时候才停止]</p>
+</li>
+</ul>
+<pre><code class="java">public class Person implements Cloneable &#123;
+    private int age;
+    private Address address;
+
+    // 构造器、getter、setter 省略
+
+    @Override
+    protected Object clone() throws CloneNotSupportedException &#123;
+        Person cloned = (Person) super.clone();
+        // 假设Address也实现了Cloneable接口
+        cloned.address = (Address) this.address.clone(); 
+        return cloned;
+    &#125;
+&#125;
+
+public class Address implements Cloneable &#123;
+    private String street;
+    private String city;
+
+    // 构造器、getter、setter 省略
+
+    @Override
+    protected Object clone() throws CloneNotSupportedException &#123;
+        return super.clone();
+    &#125;
+&#125;
+</code></pre>
+<ul>
+<li>通过<strong>序列化</strong><del>对象转二进制</del>和<strong>反序列化</strong><del>二进制转对象</del>。这种方式不需要实现<code>Cloneable</code>接口，但你的类需要实现<code>Serializable</code>接口。反序列化不会调用构造方法</li>
+</ul>
+<h4 id="开启线程的时候为什么用的是thread-start方法："><a href="#开启线程的时候为什么用的是thread-start方法：" class="headerlink" title="开启线程的时候为什么用的是thread.start方法："></a>开启线程的时候为什么用的是thread.start方法：</h4><p>thread.start()方法用于启动一个新线程，并执行该线程的run()方法。调用start()方法后，线程会被放入线程调度队列，等待CPU调度执行。</p>
+<p>直接调用run()方法，并不会启动一个新线程，而是在当前线程中执行run()方法，这不符合多线程编程的目的。使用start()方法可以确保线程并发执行，提高程序的性能和响应速度。</p>
+<p>java没权限开启一个线程 要调用底层的操作系统 在JVM的底层实现中，会有相应的本地（C或C++）方法来处理线程的创建和管理</p>
 
     </div>
 

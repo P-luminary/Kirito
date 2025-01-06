@@ -1,0 +1,500 @@
+
+<!DOCTYPE html>
+<html lang="zh_CH ">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P-luminary || SpringCloud</title>
+    <meta name="author" content="Asuna">
+    <meta name="description" content=" ">
+    <meta name="keywords" content=" ">
+    <link rel="icon" href="/https://raw.githubusercontent.com/P-luminary/images/master/data/asuna.jpg">
+    <link rel="stylesheet" href="/css/antd.min.css">
+    
+    <link rel="stylesheet" href="/css/maiden-theme.css">
+    
+    <script src="/js/vue.js"></script>
+    <script src="/js/antd.min.js"></script>
+<meta name="generator" content="Hexo 6.1.0"></head>
+
+<body>
+
+    <div id="loading"
+        style="height: 100vh; width: 100%; position: fixed;display: flex;z-index: 200; justify-content: space-between;">
+        <div id="loadleft" style="width: 50%;background-color: #ffffff;transition: width 0.6s ease-out;"></div>
+        <div id="loadright" style="width: 50%;background-color: #ffffff;transition: width 0.6s ease-out;"></div>
+        <div
+            style="position: fixed; height: 100vh; width: 100%;display: flex;justify-content: center;align-items: center;">
+            <div id="loadcontent"
+                style="width:400px;height:400px;padding:50px;border-radius:50%;display:flex;justify-content:center;align-items:center;border:solid 10px#a3ddfb; text-align:center;opacity:1;transition:opacity 0.3s ease-out;">
+                <div>
+                    <h2>LOADING...</h2>
+                    <p>加载过慢请开启缓存(浏览器默认开启)</p>
+                    <div>
+                        <img src="/dancingkitty.gif" alt="loading">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="layout">
+        <transition name="into">
+            <div v-show="show_page" style="display: none;">
+                <div id="menu_show">
+                     
+<nav id="menu">
+    <div class="desktop-menu">
+        <a href="/">
+            <span class="title">P-luminary</span>
+        </a>
+        
+        <a href="/">
+            <span>
+                <a-icon type="home" theme="filled" />
+            </span>
+            <span>home</span>
+        </a>
+        
+        <a href="/tags/语法">
+            <span>
+                <a-icon type="tags" theme="filled" />
+            </span>
+            <span>tags</span>
+        </a>
+        
+    </div>
+
+    <div :class="'phone-menu ' + menu_show" id="phone-menu">
+        <div :class="'title'" @click="menu_show=!menu_show">
+            <span style="margin-right: 10px;">
+                <a-icon type="appstore" theme="filled" />
+            </span>
+            <span>P-luminary</span>
+        </div>
+        <div class="items" v-show="menu_show">
+            
+            <a href="/">
+                <div class="item">
+                    <div style="min-width:20px; max-width:50px; width: 10%">
+                        <a-icon type="home" theme="filled" />
+                    </div>
+                    <div style="min-width:100px;max-width: 150%;width: 20%;">home</div>
+                </div>
+            </a>
+            
+            <a href="/tags/语法">
+                <div class="item">
+                    <div style="min-width:20px; max-width:50px; width: 10%">
+                        <a-icon type="tags" theme="filled" />
+                    </div>
+                    <div style="min-width:100px;max-width: 150%;width: 20%;">tags</div>
+                </div>
+            </a>
+            
+        </div>
+        <div class="curtain" v-show="menu_show"></div>
+    </div>
+
+</nav>
+                </div>
+
+                <div id="main">
+                     
+<link rel="stylesheet" href="/css/post-body.css">
+<div class="article">
+    <div>
+        <h1>SpringCloud </h1>
+    </div>
+    <div class="info">
+        <span class="date">
+            <span class="icon">
+                <a-icon type="calendar" theme="filled" />
+            </span>
+            2025/1/6
+        </span>
+
+        
+
+        
+
+        <span class="tags">
+            <span class="icon">
+                <a-icon type="tags" theme="filled" />
+            </span>
+            
+            <span class="tag">
+                
+                <a href="/tags/HM" style=color:#00bcd4>
+                    HM
+                </a>
+            </span>
+            
+        </span>
+        
+    </div>
+
+    <div class="content" v-pre>
+        <h4 id="注册RestTemplate"><a href="#注册RestTemplate" class="headerlink" title="注册RestTemplate"></a>注册RestTemplate</h4><p>在order-service的OrderApplication中注册RestTemplate</p>
+<h4 id="服务远程调用RestTemplate"><a href="#服务远程调用RestTemplate" class="headerlink" title="服务远程调用RestTemplate"></a>服务远程调用RestTemplate</h4><p>修改order-service中的OrderService的queryOrderById方法：</p>
+<pre><code class="java">@Service
+public class OrderService &#123;
+    @Autowired
+    private RestTemplate restTemplate;
+    public Order queryOrderById(Long orderId) &#123;
+        // 1.查询订单
+        Order order = orderMapper.findById(orderId);
+        // TODO 2.查询用户 
+        String url = &quot;http://localhost:8081/user/&quot; +  order.getUserId();
+        User user = restTemplate.getForObject(url, User.class);
+        // 3.封装user信息
+        order.setUser(user);
+        // 4.返回
+        return order;
+    &#125;
+&#125;
+</code></pre>
+<h6 id="微服务调用方式"><a href="#微服务调用方式" class="headerlink" title="微服务调用方式"></a>微服务调用方式</h6><p>基于RestTemplate发起的http请求实现远程调用<br>http请求做远程调用是与语言无关的调用，只要知道对方的ip、端口、接口路径、请求参数即可。</p>
+<p>Eureka -server会拥有eureka-client的<strong>服务名称 + IP端口号</strong></p>
+<blockquote>
+<p>user-service:<br>    localhost: 8081<br>    localhost: 8082<br>    localhost: 8083<br>order-service:              第一次请求提供者的时候会拉取服务信息<br>    localhost: 8088</p>
+</blockquote>
+<p>消费者也需要把信息注册到Eureka 防止后面被别人调用</p>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/a9b535e9aa7f5996b85a3275627b75d7747fec3f/Eureka%E8%A7%A3%E5%86%B3%E6%9C%8D%E5%8A%A1%E8%BF%9C%E7%A8%8B%E7%9A%84%E4%B8%89%E5%A4%A7%E9%97%AE%E9%A2%98.png"></p>
+<p>在Services的终端右键 → Edit Configuration → Modify options → Add VM → 输入不同host</p>
+<table>
+<thead>
+<tr>
+<th><strong>内置负载均衡规则类</strong></th>
+<th><strong>规则描述</strong></th>
+</tr>
+</thead>
+<tbody><tr>
+<td>RoundRobinRule</td>
+<td>简单轮询服务列表来选择服务器。</td>
+</tr>
+<tr>
+<td>AvailabilityFilteringRule</td>
+<td>对以下两种服务器进行忽略：   （1）在默认情况下，这台服务器如果3次连接失败，这台服务器就会被设置为“短路”状态。短路状态将持续30秒，如果再次连接失败，短路的持续时间就会几何级地增加。  （2）并发数过高的服务器。如果一个服务器的并发连接数过高，配置了AvailabilityFilteringRule规则的客户端也会将其忽略。并发连接数的上限，可以由客户端的<clientName>.<clientConfigNameSpace>.ActiveConnectionsLimit属性进行配置。</td>
+</tr>
+<tr>
+<td>WeightedResponseTimeRule</td>
+<td>为每一个服务器赋予一个权重值。服务器响应时间越长，这个服务器的权重就越小。这个规则会随机选择服务器，这个权重值会影响服务器的选择。</td>
+</tr>
+<tr>
+<td>ZoneAvoidanceRule</td>
+<td>以区域可用的服务器为基础进行服务器的选择。使用Zone对服务器进行分类，这个Zone可以理解为一个机房、一个机架等。而后再对Zone内的多个服务做轮询。</td>
+</tr>
+<tr>
+<td>BestAvailableRule</td>
+<td>忽略那些短路的服务器，并选择并发数较低的服务器。</td>
+</tr>
+<tr>
+<td>RandomRule</td>
+<td>随机选择一个可用的服务器。</td>
+</tr>
+<tr>
+<td>RetryRule</td>
+<td>重试机制的选择逻辑</td>
+</tr>
+</tbody></table>
+<h3 id="负载均衡策略"><a href="#负载均衡策略" class="headerlink" title="负载均衡策略"></a><strong>负载均衡策略</strong></h3><p>通过定义IRule实现可以修改负载均衡规则，有两种方式：</p>
+<p>1.代码方式：在order-service中的OrderApplication类中，定义一个新的IRule：</p>
+<pre><code class="java">@Bean
+public IRule randomRule()&#123;
+    return new RandomRule();
+&#125;
+</code></pre>
+<p>2.配置文件方式：在order-service的application.yml文件中，添加新的配置也可以修改规则：</p>
+<pre><code class="java">userservice:
+ribbon:
+NFLoadBalancerRuleClassName: com.netflix.loadbalancer.RandomRule  #负载均衡规则 
+</code></pre>
+<h6 id="饥饿加载"><a href="#饥饿加载" class="headerlink" title="饥饿加载"></a><strong>饥饿加载</strong></h6><p>Ribbon默认是采用懒加载，即第一次访问时才会去创建LoadBalanceClient，请求时间会很长。<br>而饥饿加载则会在项目启动时创建，降低第一次访问的耗时，通过下面配置开启饥饿加载：</p>
+<pre><code class="java">ribbon:
+  eager-load:
+    enabled: true # 开启饥饿加载 
+    clients: userservice # 指定对userservice这个服务饥饿加载
+</code></pre>
+<h1 id="Nacos注册中心"><a href="#Nacos注册中心" class="headerlink" title="Nacos注册中心"></a>Nacos注册中心</h1><p><a target="_blank" rel="noopener" href="https://nacos.io/">Nacos</a>是阿里巴巴的产品，现在是<a target="_blank" rel="noopener" href="https://spring.io/projects/spring-cloud">SpringCloud</a>中的一个组件。相比<a target="_blank" rel="noopener" href="https://github.com/Netflix/eureka">Eureka</a>功能更加丰富，在国内受欢迎程度较高。</p>
+<h3 id="Nacos安装指南"><a href="#Nacos安装指南" class="headerlink" title="Nacos安装指南"></a>Nacos安装指南</h3><h3 id="1-Windows安装"><a href="#1-Windows安装" class="headerlink" title="1.Windows安装"></a>1.Windows安装</h3><p>开发阶段采用单机安装即可。</p>
+<h2 id="1-1-下载安装包"><a href="#1-1-下载安装包" class="headerlink" title="1.1.下载安装包"></a>1.1.下载安装包</h2><p>在Nacos的GitHub页面，提供有下载链接，可以下载编译好的Nacos服务端或者源代码：</p>
+<p>GitHub主页：<a target="_blank" rel="noopener" href="https://github.com/alibaba/nacos">https://github.com/alibaba/nacos</a></p>
+<p>GitHub的Release下载页：<a target="_blank" rel="noopener" href="https://github.com/alibaba/nacos/releases">https://github.com/alibaba/nacos/releases</a></p>
+<p>如图：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day01-SpringCloud\资料\assets\image-20210402161102887.png" alt="image-20210402161102887"></p>
+<p>本课程采用1.4.1.版本的Nacos，课前资料已经准备了安装包：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day01-SpringCloud\资料\assets\image-20210402161130261.png" alt="image-20210402161130261"></p>
+<p>windows版本使用<code>nacos-server-1.4.1.zip</code>包即可。</p>
+<h2 id="1-2-解压"><a href="#1-2-解压" class="headerlink" title="1.2.解压"></a>1.2.解压</h2><p>将这个包解压到任意非中文目录下，如图：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day01-SpringCloud\资料\assets\image-20210402161843337.png" alt="image-20210402161843337"></p>
+<p>目录说明：</p>
+<ul>
+<li>bin：启动脚本</li>
+<li>conf：配置文件</li>
+</ul>
+<h2 id="1-3-端口配置"><a href="#1-3-端口配置" class="headerlink" title="1.3.端口配置"></a>1.3.端口配置</h2><p>Nacos的默认端口是8848，如果你电脑上的其它进程占用了8848端口，请先尝试关闭该进程。</p>
+<p><strong>如果无法关闭占用8848端口的进程</strong>，也可以进入nacos的conf目录，修改配置文件中的端口：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day01-SpringCloud\资料\assets\image-20210402162008280.png" alt="image-20210402162008280"></p>
+<p>修改其中的内容：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day01-SpringCloud\资料\assets\image-20210402162251093.png" alt="image-20210402162251093"></p>
+<h2 id="1-4-启动"><a href="#1-4-启动" class="headerlink" title="1.4.启动"></a>1.4.启动</h2><p>启动非常简单，进入bin目录，结构如下：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day01-SpringCloud\资料\assets\image-20210402162350977.png" alt="image-20210402162350977"></p>
+<p>然后执行命令即可：</p>
+<ul>
+<li><p>windows命令：</p>
+<pre><code>startup.cmd -m standalone
+</code></pre>
+</li>
+</ul>
+<p>执行后的效果如图：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day01-SpringCloud\资料\assets\image-20210402162526774.png" alt="image-20210402162526774"></p>
+<h2 id="1-5-访问"><a href="#1-5-访问" class="headerlink" title="1.5.访问"></a>1.5.访问</h2><p>在浏览器输入地址：<a target="_blank" rel="noopener" href="http://127.0.0.1:8848/nacos%E5%8D%B3%E5%8F%AF%EF%BC%9A">http://127.0.0.1:8848/nacos即可：</a></p>
+<p><img src="E:\项目二\资料\微服务\basic\day01-SpringCloud\资料\assets\image-20210402162630427.png" alt="image-20210402162630427"></p>
+<p>默认的账号和密码都是nacos，进入后：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day01-SpringCloud\资料\assets\image-20210402162709515.png" alt="image-20210402162709515"></p>
+<h1 id="2-Linux安装"><a href="#2-Linux安装" class="headerlink" title="2.Linux安装"></a>2.Linux安装</h1><p>Linux或者Mac安装方式与Windows类似。</p>
+<h2 id="2-1-安装JDK"><a href="#2-1-安装JDK" class="headerlink" title="2.1.安装JDK"></a>2.1.安装JDK</h2><p>Nacos依赖于JDK运行，索引Linux上也需要安装JDK才行。</p>
+<p>上传jdk安装包：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day01-SpringCloud\资料\assets\image-20210402172334810.png" alt="image-20210402172334810"></p>
+<p>上传到某个目录，例如：<code>/usr/local/</code></p>
+<p>然后解压缩：</p>
+<pre><code class="sh">tar -xvf jdk-8u144-linux-x64.tar.gz
+</code></pre>
+<p>然后重命名为java</p>
+<p>配置环境变量：</p>
+<pre><code class="sh">export JAVA_HOME=/usr/local/java
+export PATH=$PATH:$JAVA_HOME/bin
+</code></pre>
+<p>设置环境变量：</p>
+<pre><code class="sh">source /etc/profile
+</code></pre>
+<h2 id="2-2-上传安装包"><a href="#2-2-上传安装包" class="headerlink" title="2.2.上传安装包"></a>2.2.上传安装包</h2><p>如图：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day01-SpringCloud\资料\assets\image-20210402161102887.png" alt="image-20210402161102887"></p>
+<p>也可以直接使用课前资料中的tar.gz：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day01-SpringCloud\资料\assets\image-20210402161130261.png" alt="image-20210402161130261"></p>
+<p>上传到Linux服务器的某个目录，例如<code>/usr/local/src</code>目录下：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day01-SpringCloud\资料\assets\image-20210402163715580.png" alt="image-20210402163715580"></p>
+<h2 id="2-3-解压"><a href="#2-3-解压" class="headerlink" title="2.3.解压"></a>2.3.解压</h2><p>命令解压缩安装包：</p>
+<pre><code class="sh">tar -xvf nacos-server-1.4.1.tar.gz
+</code></pre>
+<p>然后删除安装包：</p>
+<pre><code class="sh">rm -rf nacos-server-1.4.1.tar.gz
+</code></pre>
+<p>目录中最终样式：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day01-SpringCloud\资料\assets\image-20210402163858429.png" alt="image-20210402163858429"></p>
+<p>目录内部：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day01-SpringCloud\资料\assets\image-20210402164414827.png" alt="image-20210402164414827"></p>
+<h2 id="2-4-端口配置"><a href="#2-4-端口配置" class="headerlink" title="2.4.端口配置"></a>2.4.端口配置</h2><p>与windows中类似</p>
+<h2 id="2-5-启动"><a href="#2-5-启动" class="headerlink" title="2.5.启动"></a>2.5.启动</h2><p>在nacos&#x2F;bin目录中，输入命令启动Nacos：</p>
+<pre><code class="sh">sh startup.sh -m standalone
+</code></pre>
+<h1 id="3-Nacos的依赖"><a href="#3-Nacos的依赖" class="headerlink" title="3.Nacos的依赖"></a>3.Nacos的依赖</h1><p>父工程：</p>
+<pre><code class="xml">&lt;dependency&gt;
+    &lt;groupId&gt;com.alibaba.cloud&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-cloud-alibaba-dependencies&lt;/artifactId&gt;
+    &lt;version&gt;2.2.5.RELEASE&lt;/version&gt;
+    &lt;type&gt;pom&lt;/type&gt;
+    &lt;scope&gt;import&lt;/scope&gt;
+&lt;/dependency&gt;
+</code></pre>
+<p>客户端：</p>
+<pre><code class="xml">&lt;!-- nacos客户端依赖包 --&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;com.alibaba.cloud&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-cloud-starter-alibaba-nacos-discovery&lt;/artifactId&gt;
+&lt;/dependency&gt;
+</code></pre>
+<h5 id="如果要从Eruka转换成Nacos的时候一定要注释pom-xml的Eruka依赖噢"><a href="#如果要从Eruka转换成Nacos的时候一定要注释pom-xml的Eruka依赖噢" class="headerlink" title="如果要从Eruka转换成Nacos的时候一定要注释pom.xml的Eruka依赖噢"></a><span style = "color:red">如果要从Eruka转换成Nacos的时候一定要注释pom.xml的Eruka依赖噢</span></h5><p>1.Nacos服务搭建</p>
+<p>① 下载安装包</p>
+<p>② 解压</p>
+<p>③ 在bin目录下运行指令：startup.cmd -m standalone</p>
+<p>2.Nacos服务注册或发现</p>
+<p>① 引入nacos.discovery依赖</p>
+<p>② 配置nacos地址spring.cloud.nacos.server-addr</p>
+<h6 id="服务集群属性"><a href="#服务集群属性" class="headerlink" title="服务集群属性"></a><strong>服务集群属性</strong></h6><p>1.修改application.yml，添加如下内容：</p>
+<pre><code class="yml">server:
+  port: 8081
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/cloud_user?useSSL=false
+    username: root
+    password: root
+    driver-class-name: com.mysql.jdbc.Driver
+  application:
+    name: userservice
+  cloud:
+    nacos:
+      server-addr: localhost:8848
+      discovery:
+        cluster-name: HZ #跨地区调用
+mybatis:
+  type-aliases-package: cn.itcast.user.pojo
+  configuration:
+    map-underscore-to-camel-case: true
+logging:
+  level:
+    cn.itcast: debug
+  pattern:
+    dateformat: MM-dd HH:mm:ss:SSS
+#eureka:
+#  client:
+#    service-url:
+#      defaultZone: http://127.0.0.1:10086/eureka
+</code></pre>
+<p><code>C:\Users\Pluminary\Desktop\HouDuan\cloud-demo</code></p>
+<p>2.在Nacos控制台可以看到集群变化：</p>
+<blockquote>
+<p>[Nacos] (<a target="_blank" rel="noopener" href="http://localhost:8848/nacos/#/serviceDetail?name=userservice&amp;groupName=DEFAULT_GROUP">http://localhost:8848/nacos/#/serviceDetail?name=userservice&amp;groupName=DEFAULT_GROUP</a>)</p>
+</blockquote>
+<h6 id="更改order-service的yml"><a href="#更改order-service的yml" class="headerlink" title="更改order-service的yml"></a>更改order-service的yml</h6><pre><code class="yml">server:
+  port: 8088
+spring:
+  application:
+    name: orderservice
+  datasource:
+    url: jdbc:mysql://localhost:3306/cloud_order?useSSL=false
+    username: root
+    password: root
+    driver-class-name: com.mysql.jdbc.Driver
+  cloud:
+    nacos:
+      server-addr: localhost:8848
+      discovery:
+        cluster-name: HZ
+mybatis:
+  type-aliases-package: cn.itcast.user.pojo
+  configuration:
+    map-underscore-to-camel-case: true
+logging:
+  level:
+    cn.itcast: debug
+  pattern:
+    dateformat: MM-dd HH:mm:ss:SSS
+#eureka:
+#  client:
+#    service-url:
+#      defaultZone: http://127.0.0.1:10086/eureka
+userservice:
+  ribbon:
+   # 负载均衡规则 优先调用同集群下的
+    NFLoadBalancerRuleClassName: com.alibaba.cloud.nacos.ribbon.NacosRule 
+
+ribbon:
+  eager-load:
+    enabled: true
+    clients:
+     - userservice
+</code></pre>
+<h6 id="nacos如果集群的Order权重编辑为1-另一个User权重是0-1-那么请求的时候-访问Order的概率远远超大于User"><a href="#nacos如果集群的Order权重编辑为1-另一个User权重是0-1-那么请求的时候-访问Order的概率远远超大于User" class="headerlink" title="nacos如果集群的Order权重编辑为1 另一个User权重是0.1 那么请求的时候 访问Order的概率远远超大于User"></a>nacos如果集群的Order权重编辑为1 另一个User权重是0.1 那么请求的时候 访问Order的概率远远超大于User</h6><p><strong>实例的权重控制</strong></p>
+<p>① Nacos控制台可以设置实例的权重值，0~1之间</p>
+<p>② 同集群内的多个实例，权重越高被访问的频率越高</p>
+<p>③ 权重设置为0则完全不会被访问</p>
+<p><strong>环境隔离</strong> <strong>- namespace</strong></p>
+<p>Nacos中服务存储和数据存储的最外层都是一个名为namespace的东西，用来做最外层隔离<br>在前端创建一个dev的开发环境</p>
+<pre><code class="yml">  cloud:
+    nacos:
+      server-addr: localhost:8848
+      discovery:
+        cluster-name: HZ
+        namespace: dev
+</code></pre>
+<p>Nacos环境隔离</p>
+<p>①每个namespace都有唯一id</p>
+<p>②服务设置namespace时要写id而不是名称</p>
+<p>③不同namespace下的服务互相不可见</p>
+<p><strong><u>Nacos和Eureka最重要的区别就是 Nacos会主动推送变更消息push 不用去等那90秒的3次心跳</u></strong></p>
+
+    </div>
+
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gitalk@1/dist/gitalk.css">
+    <div id="comment">
+        <div id="gitalk-container">
+        </div>
+    </div>
+    
+</div>
+                     
+<footer id="footer">
+    <div class="footer-wrap">
+        <div>
+            © 2018 - 2025 P-luminary
+            <span class="footer-icon">
+                <a-icon type="flag" theme="filled" /></span>
+            @Asuna
+        </div>
+        <div></div>
+        <div>Based on the <a target="_blank" rel="noopener" href="https://hexo.io/">Hexo Engine</a>
+<!--         & <a target="_blank" rel="noopener" href="https://github.com/korilin/hexo-theme-particle">Particle Theme</a></div> -->
+        
+    </div>
+
+</footer>
+
+<script src="/js/highlight.min.js"></script>
+<script src="/js/particle.js"></script>
+                </div>
+            </div>
+        </transition>
+    </div>
+
+    <script>
+    new Vue({
+        el: "#layout",
+        data: {
+            show_page: false,
+            onload_menu: false,
+            menu_show: false,
+            card_top: 100
+        },
+        created: function () {
+            var that = this
+            window.onload = function () {
+                that.show_page = true
+                document.getElementById("loadcontent").style.opacity = 0
+                setTimeout(function () {
+                    document.getElementById("loadleft").style.width = 0
+                    document.getElementById("loadright").style.width = 0
+                }, 300)
+                setTimeout(function () {
+                    document.getElementById("loading").style = "display:none"
+                }, 600)
+            }
+        },
+        mounted: function () {
+            var that = this
+            window.addEventListener('scroll', function (e) {
+                that.menu_show = false
+            })
+        },
+        methods: {
+            home_click: function () {
+                window.scrollTo({
+                    top: window.innerHeight - 80,
+                    behavior: "smooth",
+                });
+            }
+        }
+    })
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/gitalk@1/dist/gitalk.min.js"></script>
+<script>
+    const gitalk = new Gitalk({
+        clientID: '',
+        clientSecret: '',
+        repo: 'hexo-theme-particle',      // The repository of store comments,
+        owner: 'P-luminary',
+        admin: ['P-luminary'],
+        language: 'en',
+        id: location.pathname,      // Ensure uniqueness and length less than 50
+        distractionFreeMode: true  // Facebook-like distraction free mode
+    })
+    gitalk.render('gitalk-container')
+</script>
+
+</body>
+
+</html>

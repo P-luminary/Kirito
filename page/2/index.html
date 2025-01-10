@@ -1885,6 +1885,8 @@ public @interface EnableAutoConfiguration &#123;
 </ul>
 </blockquote>
 <p><img src="https://raw.githubusercontent.com/P-luminary/images/3c304f59104d2917c35ecb658f95f7073365ed9c/Eureka%E5%92%8CNacos%E5%8C%BA%E5%88%AB.jpg"></p>
+<p><span style = "color:red"><strong>把RestTemplate替换成OpenFeign后它们的底层还是一样的吗？</strong></span></p>
+<p>OpenFeign的底层原理也是根据服务名称，首先去远程注册中心拉取服务列表，底层也会在本地缓存一份，也会根据负载均衡选出一个实例，又运用了jdk的动态代理生成代理类，也会涉及到反射机制，最终拼出完整的url，发起http远程调用</p>
 <p><span style = "color:red"><strong>你们项目负载均衡如何实现的？</strong></span><del>图1.1</del></p>
 <blockquote>
 <p>微服务的负载均衡主要使用了一个组件Ribbon，比如，我们再使用feign远程调用的过程中，底层的负载均衡就是使用了Ribbon</p>
@@ -3112,7 +3114,7 @@ t3.start();
 </thead>
 <tbody><tr>
 <td>重量级锁</td>
-<td>底层使用的Monitor实现，里面涉及到了用户态和内核态的切换、进程的上下文切换，成本较高，性能比较低</td>
+<td>底层使用的Monitor实现，里面涉及到了用户态和内核态的切换、进程的上下文切换，成本较高，性能比较低 【有多个线程来抢】</td>
 </tr>
 <tr>
 <td>轻量级锁</td>
@@ -3633,7 +3635,63 @@ public static void main(String[] args)&#123;
 <p>栈帧过多导致栈内存溢出，经典问题：递归调用<br>栈帧过大导致栈内存溢出</p>
 <p><span style = "color:blue">堆栈的区别是什么？</span></p>
 <p>栈内存一般会用来存储局部变量和方法调用，但堆内存是用来存储Java对象和数组的的。堆会GC垃圾回收，而栈不会<br>栈内存是线程私有的，而堆内存是线程共有的。<br>两者异常错误不同，但如果栈内存或者堆内存不足都会抛出异常<br>  栈空间不足:java.lang.StackOverFlowError。<br>  堆空间不足:java.ang.OutOfMemoryError。</p>
-<p><img src="/"></p>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/420de72ff7c225960e7aff5d59f20c14e93ecb0a/%E4%BB%80%E4%B9%88%E6%98%AF%E8%99%9A%E6%8B%9F%E6%9C%BA%E6%A0%88.png"></p>
+<p><span style = "color:red"><strong>能不能解释一下方法区</strong></span></p>
+<ul>
+<li>方法区(Method Area)是各个线程<strong>共享的内存区域</strong></li>
+<li>主要存储类的信息、运行时常量池</li>
+<li>虚拟机启动的时候创建，关闭虚拟机时释放</li>
+<li>如果方法区域中的内存无法满足分配请求，则会抛出<code>OutOfMemoryError: Metaspace</code></li>
+</ul>
+<h6 id="常量池"><a href="#常量池" class="headerlink" title="常量池"></a>常量池</h6><p>可以看作是一张表，虚拟机指令根据这张常量表找到要执行的类名、方法名、参数类型、字面量等信息<br>在<strong>Terminal</strong>中执行：<code>javap -v Application.class</code><br>可以查看字节码结构 (<strong><u>类的基本信息、常量池、方法定义</u></strong>)<br>当类被加载，它的常量池信息就会<strong>放入运行时常量池</strong>，并把里面的<strong>符号地址变为真实地址</strong></p>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/dea620655b2b4c7234ba3b2f4fcedbf76a0bb9a8/%E8%A7%A3%E9%87%8A%E4%B8%80%E4%B8%8B%E6%96%B9%E6%B3%95%E5%8C%BA.png"></p>
+<p><span style = "color:red"><strong>你听过直接内存吗？</strong></span></p>
+<p><strong>直接内存</strong>：并不属于JVM中的内存结构，不由JVM进行管理。是虚拟机的系统内存，常见于NIO操作时，用于数据缓冲区，它分配回收成本较高，但读写能力高。[平时的是BIO]</p>
+<p>直接内存并不属于JVM中的内存结构，不由VM进行管理。是虚拟机的系统内存常见于 NIO 操作时，用于数据缓冲区，分配回收成本较高，但读写性能高，不受 JVM 内存回收管理</p>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/5823b0e711a3e4029e411438f0a85468af5dfa3f/%E7%9B%B4%E6%8E%A5%E5%86%85%E5%AD%98.png"></p>
+<p><span style = "color:red"><strong>什么是类加载器，类加载器有哪些？</strong></span></p>
+<h6 id="类加载器"><a href="#类加载器" class="headerlink" title="类加载器"></a>类加载器</h6><p>JVM只会运行二进制文件，类加载器的作用就是将<strong>字节码文件加载到JVM中</strong>，从而让Java程序能够启动起来</p>
+<ol>
+<li><strong>引导类加载器（Bootstrap ClassLoader）</strong>：<del>加载JAVA_HOME&#x2F;jre&#x2F;lib目录下的库</del><ul>
+<li>这是最顶层的类加载器，它用于加载Java的核心库，这些库位于<code>&lt;JAVA_HOME&gt;/jre/lib</code>目录（比如<code>rt.jar</code>、<code>resources.jar</code>等），或者被<code>-Xbootclasspath</code>参数指定的路径中。</li>
+<li><u><strong>引导类加载器是用原生代码（如C&#x2F;C++）实现的</strong></u>，它属于JVM的一部分。</li>
+<li>它并不继承自<code>java.lang.ClassLoader</code>，而是由JVM自身实现。</li>
+</ul>
+</li>
+<li><strong>扩展类加载器（Extension ClassLoader）</strong>：<del>加载JAVA_HOME&#x2F;jre&#x2F;lib&#x2F;ext目录中的类</del><ul>
+<li>它负责加载<code>&lt;JAVA_HOME&gt;/lib/ext</code>目录中，或者由系统属性<code>java.ext.dirs</code>指定的路径中的类库。</li>
+<li>它是<code>sun.misc.Launcher$ExtClassLoader</code>类的实例。</li>
+</ul>
+</li>
+<li><strong>系统类加载器（System ClassLoader）</strong>：<del>用于加载classPath下的类</del><ul>
+<li>也称为应用类加载器（Application ClassLoader），它负责加载用户类路径（Classpath）上的所有类库。</li>
+<li>系统类加载器是<code>sun.misc.Launcher$AppClassLoader</code>类的实例。</li>
+<li>它是程序中默认的类加载器，可以通过<code>ClassLoader.getSystemClassLoader()</code>方法获取。</li>
+</ul>
+</li>
+<li><strong>自定义加载器（CustomizeClassLoader）</strong><del>自定义继承ClassLoader，实现自定义类加载规则</del><ul>
+<li>用户还可以自定义类加载器。自定义类加载器通过继承<code>java.lang.ClassLoader</code>类并重写相应的方法来实现。自定义类加载器可以用于特定的需求，例如在Web容器中加载类，或者在运行时从网络或其他地方动态加载类。</li>
+</ul>
+</li>
+</ol>
+<p><span style = "color:red"><strong>什么是双亲委派模型？</strong></span></p>
+<p>加载某一个类，先委托上一级的加载器进行加载，如果上级加载器也有上级，则会继续向上委托，如果该类委托上级没有被加载，子加载器尝试加载该类</p>
+<h6 id="JVM为什么采用双亲委派机制？"><a href="#JVM为什么采用双亲委派机制？" class="headerlink" title="JVM为什么采用双亲委派机制？"></a>JVM为什么采用双亲委派机制？</h6><ul>
+<li>通过双亲委派机制可以避免某一个类被重复加载，当父类已经加载后则无需重复加载，保证唯一性</li>
+<li>为了安全，保证类库API不会被修改</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/994e5705a6bdb7a164308d3496942d154c877b36/%E5%8F%8C%E4%BA%B2%E5%A7%94%E6%B4%BE%E6%A8%A1%E5%9E%8B.png"></p>
+<p><span style = "color:red"><strong>说一下类装载的执行过程？</strong></span></p>
+<blockquote>
+<p><strong>加载</strong>：查找和导入class文件<br><strong>验证</strong>：保证加载类的准确性<br><strong>准备</strong>：为类变量分配内存并设置类变量初始值<br><strong>解析</strong>：把类中的符号引用转换为直接引用<br><strong>初始化</strong>：对类的静态变量，静态代码块执行初始化操作<br><strong>使用</strong>：JVM 开始从入口方法开始执行用户的程序代码<br><strong>卸载</strong>：当用户程序代码执行完毕后，JVM便开始销毁创建的Class对象</p>
+</blockquote>
+<p>类从加载到虚拟机中开始，直到卸载为止，它的整个生命周期包括了：<strong>加载、验证、准备、解析、初始化、使用</strong>和<strong>卸载</strong>这7个阶段。其中，验证、准备和解析这三个部分统称为连接(linking)</p>
+<ul>
+<li>通过类的全名，获得类的二进制数据流</li>
+<li>解析类的二进制数据流为方法区内的数据结构(Java类模型)</li>
+<li>创建<code>java.lang.Class</code>类的实例，表示该类型。作为方法区这个类的各种数据的访问入口</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/e2fd299592727bbdf7060af4a3ad0dee94bda04d/%E7%B1%BB%E8%A3%85%E8%BD%BD%E7%9A%84%E6%89%A7%E8%A1%8C%E8%BF%87%E7%A8%8B.png"></p>
 
             
         </div>
@@ -3648,7 +3706,7 @@ public static void main(String[] args)&#123;
         
         <span class="tag">
             
-            <a href="/tags/面试" style=color:#ffa2c4>
+            <a href="/tags/面试" style=color:#ff7d73>
                 面试
             </a>
         </span>
@@ -7237,7 +7295,7 @@ sout(newStr)
         
         <span class="tag">
             
-            <a href="/tags/HM" style=color:#879cff>
+            <a href="/tags/HM" style=color:#ffa2c4>
                 HM
             </a>
         </span>
@@ -9841,7 +9899,7 @@ public class SnakeApp &#123;
         
         <span class="tag">
             
-            <a href="/tags/HM" style=color:#1bccbc>
+            <a href="/tags/HM" style=color:#00bcd4>
                 HM
             </a>
         </span>
@@ -19203,7 +19261,7 @@ public class SpringbootWebConfigApplication &#123;
         
         <span class="tag">
             
-            <a href="/tags/HM" style=color:#ff7d73>
+            <a href="/tags/HM" style=color:#879cff>
                 HM
             </a>
         </span>
@@ -30230,7 +30288,7 @@ public class BusinessDataVO implements Serializable &#123;
         
         <span class="tag">
             
-            <a href="/tags/后端" style=color:#879cff>
+            <a href="/tags/后端" style=color:#ffa2c4>
                 后端
             </a>
         </span>
@@ -31151,7 +31209,7 @@ Element UI的CSS和JS资源：需要在HTML文件的&lt;head&gt;中引入Element
         
         <span class="tag">
             
-            <a href="/tags/前端" style=color:#1bccbc>
+            <a href="/tags/前端" style=color:#ffa2c4>
                 前端
             </a>
         </span>
@@ -53863,7 +53921,7 @@ public enum Singleton8 &#123;
         
         <span class="tag">
             
-            <a href="/tags/后端" style=color:#ff7d73>
+            <a href="/tags/后端" style=color:#1bccbc>
                 后端
             </a>
         </span>
@@ -54017,7 +54075,7 @@ public enum Singleton8 &#123;
         
         <span class="tag">
             
-            <a href="/tags/英语" style=color:#00bcd4>
+            <a href="/tags/英语" style=color:#ffa2c4>
                 英语
             </a>
         </span>

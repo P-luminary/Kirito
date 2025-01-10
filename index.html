@@ -182,6 +182,7 @@ public class OrderService &#123;
 </blockquote>
 <p>消费者也需要把信息注册到Eureka 防止后面被别人调用</p>
 <p><img src="https://raw.githubusercontent.com/P-luminary/images/a9b535e9aa7f5996b85a3275627b75d7747fec3f/Eureka%E8%A7%A3%E5%86%B3%E6%9C%8D%E5%8A%A1%E8%BF%9C%E7%A8%8B%E7%9A%84%E4%B8%89%E5%A4%A7%E9%97%AE%E9%A2%98.png"></p>
+<p>nacos注册与发现原理<br>首先是有三个重要的概念，服务消费者，注册中心，服务提供者提供者在第一次会把自己的信息注册到注册中心中，比如ip端口，服务功能等消费者需要到注册中心来寻找服务进行消费，在服务消费者第一次请求的时候会拉取服务提供者的信息，注册中心会把提供者的实例列表给到消费者供消费者选择，使用负载均衡来选择服务，默认为轮询，还有加权轮询，随机。同时服务消费者还会定时去注册中心拉取服务提供者的信息如果我们的服务挂掉了怎么办?<br>服务提供者会每隔一段时间去向注册中心报告自己的状态，如果没有向注册中心报告状态，那么这个时候注册中心会认为服务提供者已经宕机，同时会推送到我们的服务消费者，这个服务提供者已经宕机</p>
 <p>在Services的终端右键 → Edit Configuration → Modify options → Add VM → 输入不同host</p>
 <table>
 <thead>
@@ -425,6 +426,2232 @@ ribbon:
 <p>②服务设置namespace时要写id而不是名称</p>
 <p>③不同namespace下的服务互相不可见</p>
 <p><strong><u>Nacos和Eureka最重要的区别就是 Nacos会主动推送变更消息push 不用去等那90秒的3次心跳</u></strong></p>
+<h3 id="Nacos配置管理"><a href="#Nacos配置管理" class="headerlink" title="Nacos配置管理"></a>Nacos配置管理</h3><h3 id="1-1-1-在nacos中添加配置文件"><a href="#1-1-1-在nacos中添加配置文件" class="headerlink" title="1.1.1.在nacos中添加配置文件"></a>1.1.1.在nacos中添加配置文件</h3><p>如何在nacos中管理配置呢？</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day02-SpringCloud\讲义\md\assets\image-20210714164742924.png" alt="image-20210714164742924"></p>
+<p>然后在弹出的表单中，填写配置信息：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day02-SpringCloud\讲义\md\assets\image-20210714164856664.png" alt="image-20210714164856664"></p>
+<blockquote>
+<p>注意：项目的核心配置，需要热更新的配置才有放到nacos管理的必要。基本不会变更的一些配置还是保存在微服务本地比较好。</p>
+</blockquote>
+<h3 id="1-1-2-从微服务拉取配置"><a href="#1-1-2-从微服务拉取配置" class="headerlink" title="1.1.2.从微服务拉取配置"></a>1.1.2.从微服务拉取配置</h3><p>1）引入nacos-config依赖</p>
+<p>首先，在user-service服务中，引入nacos-config的客户端依赖：</p>
+<pre><code class="xml">&lt;!--nacos配置管理依赖--&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;com.alibaba.cloud&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-cloud-starter-alibaba-nacos-config&lt;/artifactId&gt;
+&lt;/dependency&gt;
+</code></pre>
+<p>2）添加bootstrap.yml</p>
+<p>然后，在user-service中添加一个bootstrap.yml文件，内容如下：</p>
+<pre><code class="yaml">spring:
+  application:
+    name: userservice # 服务名称
+  profiles:
+    active: dev #开发环境，这里是dev 
+  cloud:
+    nacos:
+      server-addr: localhost:8848 # Nacos地址
+      config:
+        file-extension: yaml # 文件后缀名
+</code></pre>
+<p>这里会根据spring.cloud.nacos.server-addr获取nacos地址，再根据</p>
+<p><code>$&#123;spring.application.name&#125;-$&#123;spring.profiles.active&#125;.$&#123;spring.cloud.nacos.config.file-extension&#125;</code>作为文件id，来读取配置。</p>
+<p>本例中，就是去读取<code>userservice-dev.yaml</code>：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day02-SpringCloud\讲义\md\assets\image-20210714170845901.png" alt="image-20210714170845901"></p>
+<p>3）读取nacos配置</p>
+<p>在user-service中的UserController中添加业务逻辑，读取pattern.dateformat配置：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day02-SpringCloud\讲义\md\assets\image-20210714170337448.png" alt="image-20210714170337448"></p>
+<p>完整代码：</p>
+<pre><code class="java">package cn.itcast.user.web;
+
+import cn.itcast.user.pojo.User;
+import cn.itcast.user.service.UserService;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
+@Slf4j
+@RestController
+@RequestMapping(&quot;/user&quot;)
+public class UserController &#123;
+
+    @Autowired
+    private UserService userService;
+
+    @Value(&quot;$&#123;pattern.dateformat&#125;&quot;)
+    private String dateformat;
+    
+    @GetMapping(&quot;now&quot;)
+    public String now()&#123;
+        return LocalDateTime.now().format(DateTimeFormatter.ofPattern(dateformat));
+    &#125;
+    // ...略
+&#125;
+</code></pre>
+<p>在页面访问，可以看到效果：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day02-SpringCloud\讲义\md\assets\image-20210714170449612.png" alt="image-20210714170449612"></p>
+<h2 id="1-2-配置热更新敏感数据涉及到修改的直接放mysql和redis"><a href="#1-2-配置热更新敏感数据涉及到修改的直接放mysql和redis" class="headerlink" title="1.2.配置热更新敏感数据涉及到修改的直接放mysql和redis"></a>1.2.配置热更新<del>敏感数据涉及到修改的直接放mysql和redis</del></h2><p>我们最终的目的，是修改nacos中的配置后，微服务中无需重启即可让配置生效，也就是<strong>配置热更新</strong>。</p>
+<p>要实现配置热更新，可以使用两种方式：</p>
+<h3 id="1-2-1-方式一"><a href="#1-2-1-方式一" class="headerlink" title="1.2.1.方式一"></a>1.2.1.方式一</h3><p>在@Value注入的变量所在类上添加注解@RefreshScope：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day02-SpringCloud\讲义\md\assets\image-20210714171036335.png" alt="image-20210714171036335"></p>
+<h3 id="1-2-2-方式二"><a href="#1-2-2-方式二" class="headerlink" title="1.2.2.方式二"></a>1.2.2.方式二</h3><p><span style = "color:red">使用 <code>@ConfigurationProperties</code> 注解代替@Value注解。</span></p>
+<p>在user-service服务中，添加一个类，读取patterrn.dateformat属性：</p>
+<pre><code class="java">package cn.itcast.user.config;
+
+import lombok.Data;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
+
+@Component
+@Data
+@ConfigurationProperties(prefix = &quot;pattern&quot;)
+public class PatternProperties &#123;
+    private String dateformat;
+&#125;
+</code></pre>
+<p>在UserController中使用这个类代替@Value：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day02-SpringCloud\讲义\md\assets\image-20210714171316124.png" alt="image-20210714171316124"></p>
+<p>完整代码：</p>
+<pre><code class="java">package cn.itcast.user.web;
+
+import cn.itcast.user.config.PatternProperties;
+import cn.itcast.user.pojo.User;
+import cn.itcast.user.service.UserService;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
+@Slf4j
+@RestController
+@RequestMapping(&quot;/user&quot;)
+public class UserController &#123;
+
+    @Autowired
+    private UserService userService;
+
+    @Autowired
+    private PatternProperties patternProperties;
+
+    @GetMapping(&quot;now&quot;)
+    public String now()&#123;
+        return LocalDateTime.now().format(DateTimeFormatter.ofPattern(patternProperties.getDateformat()));
+    &#125;
+
+    // 略
+&#125;
+</code></pre>
+<p>将配置交给Nacos管理的步骤</p>
+<p>①在Nacos中添加配置文件</p>
+<p>②在微服务中引入nacos的config依赖</p>
+<p>③在微服务中添加bootstrap.yml，配置nacos地址、当前环境、服务名称、文件后缀名。这些决定了程序启动时去nacos读取哪个文件</p>
+<h2 id="openFeign替代RestTemplate"><a href="#openFeign替代RestTemplate" class="headerlink" title="openFeign替代RestTemplate"></a>openFeign替代RestTemplate</h2><p>openFegin的使用步骤如下：</p>
+<h3 id="2-1-1-引入依赖"><a href="#2-1-1-引入依赖" class="headerlink" title="2.1.1.引入依赖"></a>2.1.1.引入依赖</h3><p>我们在order-service服务的pom文件中引入openFeign的依赖：</p>
+<pre><code class="xml">&lt;dependency&gt;
+    &lt;groupId&gt;org.springframework.cloud&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-cloud-starter-openfeign&lt;/artifactId&gt;
+&lt;/dependency&gt;
+</code></pre>
+<h3 id="2-1-2-添加注解"><a href="#2-1-2-添加注解" class="headerlink" title="2.1.2.添加注解"></a>2.1.2.添加注解</h3><p>在order-service的启动类添加注解开启openFeign的功能：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day02-SpringCloud\讲义\md\assets\image-20210714175102524.png" alt="image-20210714175102524"></p>
+<h3 id="2-1-3-编写openFeign的客户端"><a href="#2-1-3-编写openFeign的客户端" class="headerlink" title="2.1.3.编写openFeign的客户端"></a>2.1.3.编写openFeign的客户端</h3><p>在order-service中新建一个接口，内容如下：</p>
+<pre><code class="java">package cn.itcast.order.client;
+
+import cn.itcast.order.pojo.User;
+import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+
+@FeignClient(&quot;userservice&quot;)
+public interface UserClient &#123;
+    @GetMapping(&quot;/user/&#123;id&#125;&quot;)
+    User findById(@PathVariable(&quot;id&quot;) Long id);
+&#125;
+</code></pre>
+<p>这个客户端主要是基于SpringMVC的注解来声明远程调用的信息，比如：</p>
+<ul>
+<li>服务名称：userservice</li>
+<li>请求方式：GET</li>
+<li>请求路径：&#x2F;user&#x2F;{id}</li>
+<li>请求参数：Long id</li>
+<li>返回值类型：User</li>
+</ul>
+<p>这样，openFeign就可以帮助我们发送http请求，无需自己使用RestTemplate来发送了。</p>
+<h3 id="2-1-4-测试"><a href="#2-1-4-测试" class="headerlink" title="2.1.4.测试"></a>2.1.4.测试</h3><p>修改order-service中的OrderService类中的queryOrderById方法，使用openFeign客户端代替RestTemplate：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day02-SpringCloud\讲义\md\assets\image-20210714175415087.png" alt="image-20210714175415087"></p>
+<p>是不是看起来优雅多了。</p>
+<h3 id="2-1-5-总结"><a href="#2-1-5-总结" class="headerlink" title="2.1.5.总结"></a>2.1.5.总结</h3><p>使用openFeign的步骤：</p>
+<p>① 引入依赖</p>
+<p>② 添加@EnableFeignClients注解</p>
+<p>③ 编写FeignClient接口</p>
+<p>④ 使用FeignClient中定义的方法代替RestTemplate</p>
+<h2 id="2-2-自定义配置"><a href="#2-2-自定义配置" class="headerlink" title="2.2.自定义配置"></a>2.2.自定义配置</h2><p>openFeign可以支持很多的自定义配置，如下表所示：</p>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>作用</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>feign.Logger.Level</strong></td>
+<td>修改日志级别</td>
+<td>包含四种不同的级别：NONE、BASIC、HEADERS、FULL</td>
+</tr>
+<tr>
+<td>feign.codec.Decoder</td>
+<td>响应结果的解析器</td>
+<td>http远程调用的结果做解析，例如解析json字符串为java对象</td>
+</tr>
+<tr>
+<td>feign.codec.Encoder</td>
+<td>请求参数编码</td>
+<td>将请求参数编码，便于通过http请求发送</td>
+</tr>
+<tr>
+<td>feign. Contract</td>
+<td>支持的注解格式</td>
+<td>默认是SpringMVC的注解</td>
+</tr>
+<tr>
+<td>feign. Retryer</td>
+<td>失败重试机制</td>
+<td>请求失败的重试机制，默认是没有，不过会使用Ribbon的重试</td>
+</tr>
+</tbody></table>
+<p>一般情况下，默认值就能满足我们使用，如果要自定义时，只需要创建自定义的@Bean覆盖默认Bean即可。</p>
+<p>下面以日志为例来演示如何自定义配置。</p>
+<h3 id="2-2-1-配置文件方式"><a href="#2-2-1-配置文件方式" class="headerlink" title="2.2.1.配置文件方式"></a>2.2.1.配置文件方式</h3><p>基于配置文件修改openFeign的日志级别可以针对单个服务：</p>
+<pre><code class="yaml">feign:  
+  client:
+    config: 
+      userservice: # 针对某个微服务的配置
+        loggerLevel: FULL #  日志级别 
+</code></pre>
+<p>也可以针对所有服务：</p>
+<pre><code class="yaml">feign:  
+  client:
+    config: 
+      default: # 这里用default就是全局配置，如果是写服务名称，则是针对某个微服务的配置
+        loggerLevel: FULL #  日志级别 
+</code></pre>
+<p>而日志的级别分为四种：</p>
+<ul>
+<li>NONE：不记录任何日志信息，这是默认值。</li>
+<li>BASIC：仅记录请求的方法，URL以及响应状态码和执行时间</li>
+<li>HEADERS：在BASIC的基础上，额外记录了请求和响应的头信息</li>
+<li>FULL：记录所有请求和响应的明细，包括头信息、请求体、元数据。</li>
+</ul>
+<h3 id="2-2-2-Java代码方式"><a href="#2-2-2-Java代码方式" class="headerlink" title="2.2.2.Java代码方式"></a>2.2.2.Java代码方式</h3><p>也可以基于Java代码来修改日志级别，先声明一个类，然后声明一个Logger.Level的对象：</p>
+<pre><code class="java">public class DefaultFeignConfiguration  &#123;
+    @Bean
+    public Logger.Level feignLogLevel()&#123;
+        return Logger.Level.BASIC; // 日志级别为BASIC
+    &#125;
+&#125;
+</code></pre>
+<p>如果要<strong>全局生效</strong>，将其放到启动类的@EnableFeignClients这个注解中：</p>
+<pre><code class="java">@EnableFeignClients(defaultConfiguration = DefaultFeignConfiguration .class) 
+</code></pre>
+<p>如果是<strong>局部生效</strong>，则把它放到对应的@FeignClient这个注解中：</p>
+<pre><code class="java">@FeignClient(value = &quot;userservice&quot;, configuration = DefaultFeignConfiguration .class) 
+</code></pre>
+<h2 id="2-3-openFeign使用优化"><a href="#2-3-openFeign使用优化" class="headerlink" title="2.3.openFeign使用优化"></a>2.3.openFeign使用优化</h2><p>openFeign底层发起http请求，依赖于其它的框架。其底层客户端实现包括：</p>
+<p>•URLConnection：默认实现，不支持连接池</p>
+<p>•Apache HttpClient ：支持连接池</p>
+<p>•OKHttp：支持连接池</p>
+<p>因此提高openFeign的性能主要手段就是使用<strong>连接池</strong>代替默认的URLConnection。</p>
+<p>这里我们用Apache的HttpClient来演示。</p>
+<p>1）引入依赖</p>
+<p>在order-service的pom文件中引入Apache的HttpClient依赖：</p>
+<pre><code class="xml">&lt;!--httpClient的依赖 --&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;io.github.openfeign&lt;/groupId&gt;
+    &lt;artifactId&gt;feign-httpclient&lt;/artifactId&gt;
+&lt;/dependency&gt;
+</code></pre>
+<p>2）配置连接池</p>
+<p>在order-service的application.yml中添加配置：</p>
+<pre><code class="yaml">feign:
+  client:
+    config:
+      default: # default全局的配置
+        loggerLevel: BASIC # 日志级别，BASIC就是基本的请求和响应信息
+  httpclient:
+    enabled: true # 开启feign对HttpClient的支持
+    max-connections: 200 # 最大的连接数
+    max-connections-per-route: 50 # 每个路径的最大连接数
+</code></pre>
+<p>接下来，在FeignClientFactoryBean中的loadBalance方法中打断点：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day02-SpringCloud\讲义\md\assets\image-20210714185925910.png" alt="image-20210714185925910"></p>
+<p>Debug方式启动order-service服务，可以看到这里的client，底层就是Apache HttpClient：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day02-SpringCloud\讲义\md\assets\image-20210714190041542.png" alt="image-20210714190041542"></p>
+<p>总结，openFeign的优化：</p>
+<p>1.日志级别尽量用basic</p>
+<p>2.使用HttpClient或OKHttp代替URLConnection</p>
+<p>①  引入feign-httpClient依赖</p>
+<p>②  配置文件开启httpClient功能，设置连接池参数</p>
+<h2 id="2-4-最佳实践"><a href="#2-4-最佳实践" class="headerlink" title="2.4.最佳实践"></a>2.4.最佳实践</h2><p>所谓最近实践，就是使用过程中总结的经验，最好的一种使用方式。</p>
+<p>自习观察可以发现，openFeign的客户端与服务提供者的controller代码非常相似：</p>
+<p>openFeign客户端：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day02-SpringCloud\讲义\md\assets\image-20210714190542730.png" alt="image-20210714190542730"></p>
+<p>UserController：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day02-SpringCloud\讲义\md\assets\image-20210714190528450.png" alt="image-20210714190528450"></p>
+<p>有没有一种办法简化这种重复的代码编写呢？</p>
+<h3 id="2-4-1-继承方式"><a href="#2-4-1-继承方式" class="headerlink" title="2.4.1.继承方式"></a>2.4.1.继承方式</h3><p>一样的代码可以通过继承来共享：</p>
+<p>1）定义一个API接口，利用定义方法，并基于SpringMVC注解做声明。</p>
+<p>2）openFeign客户端和Controller都集成改接口</p>
+<p><img src="E:\项目二\资料\微服务\basic\day02-SpringCloud\讲义\md\assets\image-20210714190640857.png" alt="image-20210714190640857"></p>
+<p>优点：</p>
+<ul>
+<li>简单</li>
+<li>实现了代码共享</li>
+</ul>
+<p>缺点：</p>
+<ul>
+<li><p>服务提供方、服务消费方紧耦合</p>
+</li>
+<li><p>参数列表中的注解映射并不会继承，因此Controller中必须再次声明方法、参数列表、注解</p>
+</li>
+</ul>
+<h3 id="2-4-2-抽取方式"><a href="#2-4-2-抽取方式" class="headerlink" title="2.4.2.抽取方式"></a>2.4.2.抽取方式</h3><p>将openFeign的Client抽取为独立模块，并且把接口有关的POJO、默认的openFeign配置都放到这个模块中，提供给所有消费者使用。</p>
+<p>例如，将UserClient、User、openFeign的默认配置都抽取到一个feign-api包中，所有微服务引用该依赖包，即可直接使用。</p>
+<p><img src="E:\项目二\资料\微服务\basic\day02-SpringCloud\讲义\md\assets\image-20210714214041796.png" alt="image-20210714214041796"></p>
+<h3 id="2-4-3-实现基于抽取的最佳实践"><a href="#2-4-3-实现基于抽取的最佳实践" class="headerlink" title="2.4.3.实现基于抽取的最佳实践"></a>2.4.3.实现基于抽取的最佳实践</h3><h4 id="2-4-3-1-抽取"><a href="#2-4-3-1-抽取" class="headerlink" title="2.4.3.1.抽取"></a>2.4.3.1.抽取</h4><p>首先创建一个module，命名为feign-api：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day02-SpringCloud\讲义\md\assets\image-20210714204557771.png" alt="image-20210714204557771"></p>
+<p>项目结构：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day02-SpringCloud\讲义\md\assets\image-20210714204656214.png" alt="image-20210714204656214"></p>
+<p>在feign-api中然后引入openfeign的starter依赖</p>
+<pre><code class="xml">&lt;dependency&gt;
+    &lt;groupId&gt;org.springframework.cloud&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-cloud-starter-openfeign&lt;/artifactId&gt;
+&lt;/dependency&gt;
+</code></pre>
+<p>然后，order-service中编写的UserClient、User、DefaultFeignConfiguration都复制到feign-api项目中</p>
+<p><img src="E:\项目二\资料\微服务\basic\day02-SpringCloud\讲义\md\assets\image-20210714205221970.png" alt="image-20210714205221970"></p>
+<h4 id="2-4-3-2-在order-service中使用feign-api"><a href="#2-4-3-2-在order-service中使用feign-api" class="headerlink" title="2.4.3.2.在order-service中使用feign-api"></a>2.4.3.2.在order-service中使用feign-api</h4><p>首先，删除order-service中的UserClient、User、DefaultFeignConfiguration等类或接口。</p>
+<p>在order-service的pom文件中中引入feign-api的依赖：</p>
+<pre><code class="xml">&lt;dependency&gt;
+    &lt;groupId&gt;cn.itcast.demo&lt;/groupId&gt;
+    &lt;artifactId&gt;feign-api&lt;/artifactId&gt;
+    &lt;version&gt;1.0&lt;/version&gt;
+&lt;/dependency&gt;
+</code></pre>
+<p>修改order-service中的所有与上述三个组件有关的导包部分，改成导入feign-api中的包</p>
+<h4 id="2-4-3-3-重启测试"><a href="#2-4-3-3-重启测试" class="headerlink" title="2.4.3.3.重启测试"></a>2.4.3.3.重启测试</h4><p>重启后，发现服务报错了：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day02-SpringCloud\讲义\md\assets\image-20210714205623048.png" alt="image-20210714205623048"></p>
+<p>这是因为UserClient现在在cn.itcast.feign.clients包下，</p>
+<p>而order-service的@EnableFeignClients注解是在cn.itcast.order包下，不在同一个包，无法扫描到UserClient。</p>
+<h4 id="2-4-3-4-解决扫描包问题"><a href="#2-4-3-4-解决扫描包问题" class="headerlink" title="2.4.3.4.解决扫描包问题"></a>2.4.3.4.解决扫描包问题</h4><p>方式一：</p>
+<p>指定openFeign应该扫描的包：</p>
+<pre><code class="java">@EnableFeignClients(basePackages = &quot;cn.itcast.feign.clients&quot;)
+</code></pre>
+<p>方式二：</p>
+<p>指定需要加载的Client接口：</p>
+<pre><code class="java">@EnableFeignClients(clients = &#123;UserClient.class&#125;)
+</code></pre>
+<h1 id="3-Gateway服务网关"><a href="#3-Gateway服务网关" class="headerlink" title="3.Gateway服务网关"></a>3.Gateway服务网关</h1><p>Spring Cloud Gateway 是 Spring Cloud 的一个全新项目，该项目是基于 Spring 5.0，Spring Boot 2.0 和 Project Reactor 等响应式编程和事件流技术开发的网关，它旨在为微服务架构提供一种简单有效的统一的 API 路由管理方式。</p>
+<h2 id="3-1-为什么需要网关"><a href="#3-1-为什么需要网关" class="headerlink" title="3.1.为什么需要网关"></a>3.1.为什么需要网关</h2><p>Gateway网关是我们服务的守门神，所有微服务的统一入口。</p>
+<p>网关的<strong>核心功能特性</strong>：</p>
+<ul>
+<li>请求路由</li>
+<li>权限控制</li>
+<li>限流</li>
+</ul>
+<p>架构图：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day02-SpringCloud\讲义\md\assets\openFeign.png" alt="image-20210714210131152"></p>
+<p><strong>权限控制</strong>：网关作为微服务入口，需要校验用户是是否有请求资格，如果没有则进行拦截。</p>
+<p><strong>路由和负载均衡</strong>：一切请求都必须先经过gateway，但网关不处理业务，而是根据某种规则，把请求转发到某个微服务，这个过程叫做路由。当然路由的目标服务有多个时，还需要做负载均衡。</p>
+<p><strong>限流</strong>：当请求流量过高时，在网关中按照下流的微服务能够接受的速度来放行请求，避免服务压力过大。</p>
+<p>在SpringCloud中网关的实现包括两种：</p>
+<ul>
+<li>gateway</li>
+<li>zuul</li>
+</ul>
+<p>Zuul是基于Servlet的实现，属于阻塞式编程。而SpringCloudGateway则是基于Spring5中提供的WebFlux，属于响应式编程的实现，具备更好的性能。</p>
+<h2 id="3-2-gateway快速入门"><a href="#3-2-gateway快速入门" class="headerlink" title="3.2.gateway快速入门"></a>3.2.gateway快速入门</h2><p>下面，我们就演示下网关的基本路由功能。基本步骤如下：</p>
+<ol>
+<li>创建SpringBoot工程gateway，引入网关依赖</li>
+<li>编写启动类</li>
+<li>编写基础配置和路由规则</li>
+<li>启动网关服务进行测试</li>
+</ol>
+<h3 id="3-2-1-创建gateway服务，引入依赖"><a href="#3-2-1-创建gateway服务，引入依赖" class="headerlink" title="3.2.1.创建gateway服务，引入依赖"></a>3.2.1.创建gateway服务，引入依赖</h3><p>创建服务：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day02-SpringCloud\讲义\md\assets\image-20210714210919458.png" alt="image-20210714210919458"></p>
+<p>引入依赖：</p>
+<pre><code class="xml">&lt;!--网关--&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;org.springframework.cloud&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-cloud-starter-gateway&lt;/artifactId&gt;
+&lt;/dependency&gt;
+&lt;!--nacos服务发现依赖--&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;com.alibaba.cloud&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-cloud-starter-alibaba-nacos-discovery&lt;/artifactId&gt;
+&lt;/dependency&gt;
+</code></pre>
+<h3 id="3-2-2-编写启动类"><a href="#3-2-2-编写启动类" class="headerlink" title="3.2.2.编写启动类"></a>3.2.2.编写启动类</h3><pre><code class="java">package cn.itcast.gateway;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class GatewayApplication &#123;
+
+    public static void main(String[] args) &#123;
+        SpringApplication.run(GatewayApplication.class, args);
+    &#125;
+&#125;
+</code></pre>
+<h3 id="3-2-3-编写基础配置和路由规则"><a href="#3-2-3-编写基础配置和路由规则" class="headerlink" title="3.2.3.编写基础配置和路由规则"></a>3.2.3.编写基础配置和路由规则</h3><p>创建application.yml文件，内容如下：</p>
+<pre><code class="yaml">server:
+  port: 10010 # 网关端口
+spring:
+  application:
+    name: gateway # 服务名称
+  cloud:
+    nacos:
+      server-addr: localhost:8848 # nacos地址
+    gateway:
+      routes: # 网关路由配置
+        - id: user-service # 路由id，自定义，只要唯一即可
+          # uri: http://127.0.0.1:8081 # 路由的目标地址 http就是固定地址
+          uri: lb://userservice # 路由的目标地址 lb就是负载均衡，后面跟服务名称
+          predicates: # 路由断言，也就是判断请求是否符合路由规则的条件
+            - Path=/user/** # 这个是按照路径匹配，只要以/user/开头就符合要求
+</code></pre>
+<p>我们将符合<code>Path</code> 规则的一切请求，都代理到 <code>uri</code>参数指定的地址。</p>
+<p>本例中，我们将 <code>/user/**</code>开头的请求，代理到<code>lb://userservice</code>，lb是负载均衡，根据服务名拉取服务列表，实现负载均衡。</p>
+<h3 id="3-2-4-重启测试"><a href="#3-2-4-重启测试" class="headerlink" title="3.2.4.重启测试"></a>3.2.4.重启测试</h3><p>重启网关，访问<a target="_blank" rel="noopener" href="http://localhost:10010/user/1%E6%97%B6%EF%BC%8C%E7%AC%A6%E5%90%88%60/user/**%60%E8%A7%84%E5%88%99%EF%BC%8C%E8%AF%B7%E6%B1%82%E8%BD%AC%E5%8F%91%E5%88%B0uri%EF%BC%9Ahttp://userservice/user/1%EF%BC%8C%E5%BE%97%E5%88%B0%E4%BA%86%E7%BB%93%E6%9E%9C%EF%BC%9A">http://localhost:10010/user/1时，符合`/user/**`规则，请求转发到uri：http://userservice/user/1，得到了结果：</a></p>
+<p><img src="E:\项目二\资料\微服务\basic\day02-SpringCloud\讲义\md\assets\image-20210714211908341.png" alt="image-20210714211908341"></p>
+<h3 id="3-2-5-网关路由的流程图"><a href="#3-2-5-网关路由的流程图" class="headerlink" title="3.2.5.网关路由的流程图"></a>3.2.5.网关路由的流程图</h3><p>整个访问的流程如下：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day02-SpringCloud\讲义\md\assets\image-20210714211742956.png" alt="image-20210714211742956"></p>
+<p>总结：</p>
+<p>网关搭建步骤：</p>
+<ol>
+<li><p>创建项目，引入nacos服务发现和gateway依赖</p>
+</li>
+<li><p>配置application.yml，包括服务基本信息、nacos地址、路由</p>
+</li>
+</ol>
+<p>路由配置包括：</p>
+<ol>
+<li><p>路由id：路由的唯一标示</p>
+</li>
+<li><p>路由目标（uri）：路由的目标地址，http代表固定地址，lb代表根据服务名负载均衡</p>
+</li>
+<li><p>路由断言（predicates）：判断路由的规则，</p>
+</li>
+<li><p>路由过滤器（filters）：对请求或响应做处理</p>
+</li>
+</ol>
+<p>接下来，就重点来学习路由断言和路由过滤器的详细知识</p>
+<h3 id="路由断言"><a href="#路由断言" class="headerlink" title="路由断言"></a>路由断言</h3><table>
+<thead>
+<tr>
+<th><strong>名称</strong></th>
+<th><strong>说明</strong></th>
+<th><strong>示例</strong></th>
+</tr>
+</thead>
+<tbody><tr>
+<td>After</td>
+<td>是某个时间点后的请求</td>
+<td>-  After&#x3D;2037-01-20T17:42:47.789-07:00[America&#x2F;Denver]</td>
+</tr>
+<tr>
+<td>Before</td>
+<td>是某个时间点之前的请求</td>
+<td>-  Before&#x3D;2031-04-13T15:14:47.433+08:00[Asia&#x2F;Shanghai]</td>
+</tr>
+<tr>
+<td>Between</td>
+<td>是某两个时间点之前的请求</td>
+<td>-  Between&#x3D;2037-01-20T17:42:47.789-07:00[America&#x2F;Denver],  2037-01-21T17:42:47.789-07:00[America&#x2F;Denver]</td>
+</tr>
+<tr>
+<td>Cookie</td>
+<td>请求必须包含某些cookie</td>
+<td>- Cookie&#x3D;chocolate, ch.p</td>
+</tr>
+<tr>
+<td>Header</td>
+<td>请求必须包含某些header</td>
+<td>- Header&#x3D;X-Request-Id, \d+</td>
+</tr>
+<tr>
+<td>Host</td>
+<td>请求必须是访问某个host（域名）</td>
+<td>-  Host&#x3D;<strong>.somehost.org,</strong>.anotherhost.org</td>
+</tr>
+<tr>
+<td>Method</td>
+<td>请求方式必须是指定方式</td>
+<td>- Method&#x3D;GET,POST</td>
+</tr>
+<tr>
+<td>Path</td>
+<td>请求路径必须符合指定规则</td>
+<td>- Path&#x3D;&#x2F;red&#x2F;{segment},&#x2F;blue&#x2F;**</td>
+</tr>
+<tr>
+<td>Query</td>
+<td>请求参数必须包含指定参数</td>
+<td>- Query&#x3D;name, Jack或者-  Query&#x3D;name</td>
+</tr>
+<tr>
+<td>RemoteAddr</td>
+<td>请求者的ip必须是指定范围</td>
+<td>- RemoteAddr&#x3D;192.168.1.1&#x2F;24</td>
+</tr>
+<tr>
+<td>Weight</td>
+<td>权重处理</td>
+<td></td>
+</tr>
+</tbody></table>
+<pre><code class="yml">Path=/user/**是什么含义？
+路径是以/user开头的就认为是符合的
+
+server:
+  port: 10010 # 网关端口
+spring:
+  application:
+    name: gateway # 服务名称
+  cloud:
+    nacos:
+      server-addr: localhost:80 # nacos地址
+    gateway:
+      routes: # 网关路由配置
+        - id: user-service # 路由id，自定义，只要唯一即可
+          # uri: http://127.0.0.1:8081 # 路由的目标地址 http就是固定地址
+          uri: lb://userservice # 路由的目标地址 lb就是负载均衡，后面跟服务名称
+          predicates: # 路由断言，也就是判断请求是否符合路由规则的条件 是否能分发
+            - Path=/user/** # 这个是按照路径匹配，只要以/user/开头就符合要求
+            - After=2037-01-20T17:42:47.789-07:00[America/Denver] #2037年后才能访问
+</code></pre>
+<h2 id="3-4-过滤器工厂"><a href="#3-4-过滤器工厂" class="headerlink" title="3.4.过滤器工厂"></a>3.4.过滤器工厂</h2><p>GatewayFilter是网关中提供的一种过滤器，可以对进入网关的请求和微服务返回的响应做处理：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day02-SpringCloud\讲义\md\assets\image-20210714212312871.png" alt="image-20210714212312871"></p>
+<h3 id="3-4-1-路由过滤器的种类"><a href="#3-4-1-路由过滤器的种类" class="headerlink" title="3.4.1.路由过滤器的种类"></a>3.4.1.路由过滤器的种类</h3><p>Spring提供了31种不同的路由过滤器工厂。例如：</p>
+<table>
+<thead>
+<tr>
+<th><strong>名称</strong></th>
+<th><strong>说明</strong></th>
+</tr>
+</thead>
+<tbody><tr>
+<td>AddRequestHeader</td>
+<td>给当前请求添加一个请求头</td>
+</tr>
+<tr>
+<td>RemoveRequestHeader</td>
+<td>移除请求中的一个请求头</td>
+</tr>
+<tr>
+<td>AddResponseHeader</td>
+<td>给响应结果中添加一个响应头</td>
+</tr>
+<tr>
+<td>RemoveResponseHeader</td>
+<td>从响应结果中移除有一个响应头</td>
+</tr>
+<tr>
+<td>RequestRateLimiter</td>
+<td>限制请求的流量</td>
+</tr>
+<tr>
+<td>…</td>
+<td>…</td>
+</tr>
+</tbody></table>
+<h3 id="3-4-2-请求头过滤器"><a href="#3-4-2-请求头过滤器" class="headerlink" title="3.4.2.请求头过滤器"></a>3.4.2.请求头过滤器</h3><p>下面我们以AddRequestHeader 为例来讲解。</p>
+<blockquote>
+<p><strong>需求</strong>：给所有进入userservice的请求添加一个请求头：Truth&#x3D;itcast is freaking awesome!</p>
+</blockquote>
+<p>只需要修改gateway服务的application.yml文件，添加路由过滤即可：</p>
+<pre><code class="yaml">spring:
+  cloud:
+    gateway:
+      routes:
+      - id: user-service 
+        uri: lb://userservice 
+        predicates: 
+        - Path=/user/** 
+        filters: # 过滤器
+        - AddRequestHeader=Truth, Itcast is freaking awesome! # 添加请求头
+</code></pre>
+<p>当前过滤器写在userservice路由下，因此仅仅对访问userservice的请求有效。</p>
+<h3 id="3-4-3-默认过滤器"><a href="#3-4-3-默认过滤器" class="headerlink" title="3.4.3.默认过滤器"></a>3.4.3.默认过滤器</h3><p>如果要对所有的路由都生效，则可以将过滤器工厂写到default下。格式如下：</p>
+<pre><code class="java">package cn.itcast.user.web;
+
+import cn.itcast.user.config.PatternProperties;
+import cn.itcast.user.pojo.User;
+import cn.itcast.user.service.UserService;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cloud.context.config.annotation.RefreshScope;
+import org.springframework.web.bind.annotation.*;
+
+@Slf4j
+@RestController
+@RequestMapping(&quot;/user&quot;)
+@RefreshScope
+public class UserController &#123;
+
+    @Autowired
+    private UserService userService;
+    @Autowired
+    private PatternProperties patternProperties;
+
+    /**
+     * 路径： /user/110
+     *
+     * @param id 用户id
+     * @return 用户
+     */
+    @GetMapping(&quot;/&#123;id&#125;&quot;)
+    public User queryById(@PathVariable(&quot;id&quot;) Long id, @RequestHeader(&quot;Truth&quot;)String header) &#123;
+        System.out.println(&quot;header = &quot; + header);
+        return userService.queryById(id);
+    &#125;
+&#125;
+</code></pre>
+<pre><code class="yaml">server:
+  port: 10010 # 网关端口
+spring:
+  application:
+    name: gateway # 服务名称
+  cloud:
+    nacos:
+      server-addr: localhost:80 # nacos地址
+    gateway:
+      routes: # 网关路由配置
+        - id: user-service # 路由id，自定义，只要唯一即可
+          # uri: http://127.0.0.1:8081 # 路由的目标地址 http就是固定地址
+          uri: lb://userservice # 路由的目标地址 lb就是负载均衡，后面跟服务名称
+          predicates: # 路由断言，也就是判断请求是否符合路由规则的条件 是否能分发
+            - Path=/user/** # 这个是按照路径匹配，只要以/user/开头就符合要求
+            - After=2024-01-20T17:42:47.789-07:00[America/Denver]
+          filters: # 默认过滤项
+            - AddRequestHeader=Truth, Itcast is freaking awesome!
+</code></pre>
+<h3 id="3-4-4-总结"><a href="#3-4-4-总结" class="headerlink" title="3.4.4.总结"></a>3.4.4.总结</h3><p>过滤器的作用是什么？</p>
+<p>① 对路由的请求或响应做加工处理，比如添加请求头</p>
+<p>② 配置在路由下的过滤器只对当前路由的请求生效</p>
+<p>defaultFilters的作用是什么？</p>
+<p>① 对所有路由都生效的过滤器</p>
+<h2 id="3-5-全局过滤器"><a href="#3-5-全局过滤器" class="headerlink" title="3.5.全局过滤器"></a>3.5.全局过滤器</h2><p>上一节学习的过滤器，网关提供了31种，但每一种过滤器的作用都是固定的。如果我们希望拦截请求，做自己的业务逻辑则没办法实现。</p>
+<h3 id="3-5-1-全局过滤器作用"><a href="#3-5-1-全局过滤器作用" class="headerlink" title="3.5.1.全局过滤器作用"></a>3.5.1.全局过滤器作用</h3><p>全局过滤器的作用也是处理一切进入网关的请求和微服务响应，与GatewayFilter的作用一样。区别在于GatewayFilter通过配置定义，处理逻辑是固定的；而GlobalFilter的逻辑需要自己写代码实现。</p>
+<p>定义方式是实现GlobalFilter接口。</p>
+<pre><code class="java">public interface GlobalFilter &#123;
+    /**
+     *  处理当前请求，有必要的话通过&#123;@link GatewayFilterChain&#125;将请求交给下一个过滤器处理
+     *
+     * @param exchange 请求上下文，里面可以获取Request、Response等信息
+     * @param chain 用来把请求委托给下一个过滤器 
+     * @return &#123;@code Mono&lt;Void&gt;&#125; 返回标示当前过滤器业务结束
+     */
+    Mono&lt;Void&gt; filter(ServerWebExchange exchange, GatewayFilterChain chain);
+&#125;
+</code></pre>
+<p>在filter中编写自定义逻辑，可以实现下列功能：</p>
+<ul>
+<li>登录状态判断</li>
+<li>权限校验</li>
+<li>请求限流等</li>
+</ul>
+<h3 id="3-5-2-自定义全局过滤器"><a href="#3-5-2-自定义全局过滤器" class="headerlink" title="3.5.2.自定义全局过滤器"></a>3.5.2.自定义全局过滤器</h3><p>需求：定义全局过滤器，拦截请求，判断请求的参数是否满足下面条件：</p>
+<ul>
+<li><p>参数中是否有authorization，</p>
+</li>
+<li><p>authorization参数值是否为admin</p>
+</li>
+</ul>
+<p>如果同时满足则放行，否则拦截</p>
+<p>实现：</p>
+<p>在gateway中定义一个过滤器：</p>
+<pre><code class="java">package cn.itcast.gateway.filters;
+
+import org.springframework.cloud.gateway.filter.GatewayFilterChain;
+import org.springframework.cloud.gateway.filter.GlobalFilter;
+import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Component;
+import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Mono;
+
+@Order(-1)
+@Component
+public class AuthorizeFilter implements GlobalFilter &#123;
+    @Override
+    public Mono&lt;Void&gt; filter(ServerWebExchange exchange, GatewayFilterChain chain) &#123;
+        // 1.获取请求参数
+        MultiValueMap&lt;String, String&gt; params = exchange.getRequest().getQueryParams();
+        // 2.获取authorization参数
+        String auth = params.getFirst(&quot;authorization&quot;);
+        // 3.校验
+        if (&quot;admin&quot;.equals(auth)) &#123;
+            // 放行
+            return chain.filter(exchange);
+        &#125;
+        // 4.拦截
+        // 4.1.禁止访问，设置状态码
+        exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
+        // 4.2.结束处理
+        return exchange.getResponse().setComplete();
+    &#125;
+&#125;
+</code></pre>
+<p><code>[localhost](http://localhost:10010/user/1)</code> → 此时会403权限不足<br><u><strong>先断言能否分发 再去过滤器</strong></u><br><a target="_blank" rel="noopener" href="http://localhost:10010/user/1?authorization=admin">localhost:10010&#x2F;user&#x2F;1?authorization&#x3D;admin</a> → 此时会进入未被拦截</p>
+<h3 id="3-5-3-过滤器执行顺序"><a href="#3-5-3-过滤器执行顺序" class="headerlink" title="3.5.3.过滤器执行顺序"></a>3.5.3.过滤器执行顺序</h3><p>请求进入网关会碰到三类过滤器：当前路由的过滤器、DefaultFilter、GlobalFilter</p>
+<p>请求路由后，会将当前路由过滤器和DefaultFilter、GlobalFilter，合并到一个过滤器链（集合）中，排序后依次执行每个过滤器：</p>
+<p><img src="E:\项目二\资料\微服务\basic\day02-SpringCloud\讲义\md\assets\image-20210714214228409.png" alt="image-20210714214228409"></p>
+<p>排序的规则是什么呢？</p>
+<ul>
+<li>每一个过滤器都必须指定一个int类型的order值，<strong>order值越小，优先级越高，执行顺序越靠前</strong>。</li>
+<li>GlobalFilter通过实现Ordered接口，或者添加@Order注解来指定order值，由我们自己指定</li>
+<li>路由过滤器和defaultFilter的order由Spring指定，默认是按照声明顺序从1递增。</li>
+<li>当过滤器的order值一样时，会按照 defaultFilter &gt; 路由过滤器 &gt; GlobalFilter的顺序执行。</li>
+</ul>
+<p>详细内容，可以查看源码：</p>
+<p><code>org.springframework.cloud.gateway.route.RouteDefinitionRouteLocator#getFilters()</code>方法是先加载defaultFilters，然后再加载某个route的filters，然后合并。</p>
+<p><code>org.springframework.cloud.gateway.handler.FilteringWebHandler#handle()</code>方法会加载全局过滤器，与前面的过滤器合并后根据order排序，组织过滤器链</p>
+<h1 id="Docker实用篇"><a href="#Docker实用篇" class="headerlink" title="Docker实用篇"></a>Docker实用篇</h1><h2 id="1-初识Docker"><a href="#1-初识Docker" class="headerlink" title="1.初识Docker"></a>1.初识Docker</h2><h4 id="1-1-什么是Docker"><a href="#1-1-什么是Docker" class="headerlink" title="1.1.什么是Docker"></a>1.1.什么是Docker</h4><p>微服务虽然具备各种各样的优势，但服务的拆分通用给部署带来了很大的麻烦。</p>
+<ul>
+<li>分布式系统中，依赖的组件非常多，不同组件之间部署时往往会产生一些冲突。</li>
+<li>在数百上千台服务中重复部署，环境不一定一致，会遇到各种问题</li>
+</ul>
+<h3 id="1-1-1-应用部署的环境问题"><a href="#1-1-1-应用部署的环境问题" class="headerlink" title="1.1.1.应用部署的环境问题"></a>1.1.1.应用部署的环境问题</h3><p>大型项目组件较多，运行环境也较为复杂，部署时会碰到一些问题：</p>
+<ul>
+<li><p>依赖关系复杂，容易出现兼容性问题</p>
+</li>
+<li><p>开发、测试、生产环境有差异</p>
+</li>
+</ul>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731141907366.png" alt="image-20210731141907366"></p>
+<p>例如一个项目中，部署时需要依赖于node.js、Redis、RabbitMQ、MySQL等，这些服务部署时所需要的函数库、依赖项各不相同，甚至会有冲突。给部署带来了极大的困难。</p>
+<h3 id="1-1-2-Docker解决依赖兼容问题"><a href="#1-1-2-Docker解决依赖兼容问题" class="headerlink" title="1.1.2.Docker解决依赖兼容问题"></a>1.1.2.Docker解决依赖兼容问题</h3><p>而Docker确巧妙的解决了这些问题，Docker是如何实现的呢？</p>
+<p>Docker为了解决依赖的兼容问题的，采用了两个手段：</p>
+<ul>
+<li><p>将应用的Libs（函数库）、Deps（依赖）、配置与应用一起打包</p>
+</li>
+<li><p>将每个应用放到一个隔离<strong>容器</strong>去运行，避免互相干扰</p>
+</li>
+</ul>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731142219735.png" alt="image-20210731142219735"></p>
+<p>这样打包好的应用包中，既包含应用本身，也保护应用所需要的Libs、Deps，无需再操作系统上安装这些，自然就不存在不同应用之间的兼容问题了。</p>
+<p>虽然解决了不同应用的兼容问题，但是开发、测试等环境会存在差异，操作系统版本也会有差异，怎么解决这些问题呢？</p>
+<h3 id="1-1-3-Docker解决操作系统环境差异"><a href="#1-1-3-Docker解决操作系统环境差异" class="headerlink" title="1.1.3.Docker解决操作系统环境差异"></a>1.1.3.Docker解决操作系统环境差异</h3><p>要解决不同操作系统环境差异问题，必须先了解操作系统结构。以一个Ubuntu操作系统为例，结构如下：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731143401460.png" alt="image-20210731143401460"></p>
+<p>结构包括：</p>
+<ul>
+<li>计算机硬件：例如CPU、内存、磁盘等</li>
+<li>系统内核：所有Linux发行版的内核都是Linux，例如CentOS、Ubuntu、Fedora等。内核可以与计算机硬件交互，对外提供<strong>内核指令</strong>，用于操作计算机硬件。</li>
+<li>系统应用：操作系统本身提供的应用、函数库。这些函数库是对内核指令的封装，使用更加方便。</li>
+</ul>
+<p>应用于计算机交互的流程如下：</p>
+<p>1）应用调用操作系统应用（函数库），实现各种功能</p>
+<p>2）系统函数库是对内核指令集的封装，会调用内核指令</p>
+<p>3）内核指令操作计算机硬件</p>
+<p>Ubuntu和CentOSpringBoot都是基于Linux内核，无非是系统应用不同，提供的函数库有差异：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731144304990.png" alt="image-20210731144304990"></p>
+<p>此时，如果将一个Ubuntu版本的MySQL应用安装到CentOS系统，MySQL在调用Ubuntu函数库时，会发现找不到或者不匹配，就会报错了：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731144458680.png" alt="image-20210731144458680"></p>
+<p>Docker如何解决不同系统环境的问题？</p>
+<ul>
+<li>Docker将用户程序与所需要调用的系统(比如Ubuntu)函数库一起打包</li>
+<li>Docker运行到不同操作系统时，直接基于打包的函数库，借助于操作系统的Linux内核来运行</li>
+</ul>
+<p>如图：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731144820638.png" alt="image-20210731144820638"></p>
+<h3 id="1-1-4-小结"><a href="#1-1-4-小结" class="headerlink" title="1.1.4.小结"></a>1.1.4.小结</h3><p>Docker如何解决大型项目依赖关系复杂，不同组件依赖的兼容性问题？</p>
+<ul>
+<li>Docker允许开发中将应用、依赖、函数库、配置一起<strong>打包</strong>，形成可移植镜像</li>
+<li>Docker应用运行在容器中，使用沙箱机制，相互<strong>隔离</strong></li>
+</ul>
+<p>Docker如何解决开发、测试、生产环境有差异的问题？</p>
+<ul>
+<li>Docker镜像中包含完整运行环境，包括系统函数库，仅依赖系统的Linux内核，因此可以在任意Linux操作系统上运行</li>
+</ul>
+<p>Docker是一个快速交付应用、运行应用的技术，具备下列优势：</p>
+<ul>
+<li>可以将程序及其依赖、运行环境一起打包为一个镜像，可以迁移到任意Linux操作系统</li>
+<li>运行时利用沙箱机制形成隔离容器，各个应用互不干扰</li>
+<li>启动、移除都可以通过一行命令完成，方便快捷</li>
+</ul>
+<h2 id="1-2-Docker和虚拟机的区别"><a href="#1-2-Docker和虚拟机的区别" class="headerlink" title="1.2.Docker和虚拟机的区别"></a>1.2.Docker和虚拟机的区别</h2><p>Docker可以让一个应用在任何操作系统中非常方便的运行。而以前我们接触的虚拟机，也能在一个操作系统中，运行另外一个操作系统，保护系统中的任何应用。</p>
+<p>两者有什么差异呢？</p>
+<p><strong>虚拟机</strong>（virtual machine）是在操作系统中<strong>模拟</strong>硬件设备，然后运行另一个操作系统，比如在 Windows 系统里面运行 Ubuntu 系统，这样就可以运行任意的Ubuntu应用了。</p>
+<p><strong>Docker</strong>仅仅是封装函数库，并没有模拟完整的操作系统，如图：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731145914960.png" alt="image-20210731145914960"></p>
+<p>对比来看：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731152243765.png" alt="image-20210731152243765"></p>
+<p>小结：</p>
+<p>Docker和虚拟机的差异：</p>
+<ul>
+<li><p>docker是一个系统进程；虚拟机是在操作系统中的操作系统</p>
+</li>
+<li><p>docker体积小、启动速度快、性能好；虚拟机体积大、启动速度慢、性能一般</p>
+</li>
+</ul>
+<h2 id="1-3-Docker架构"><a href="#1-3-Docker架构" class="headerlink" title="1.3.Docker架构"></a>1.3.Docker架构</h2><h3 id="1-3-1-镜像和容器"><a href="#1-3-1-镜像和容器" class="headerlink" title="1.3.1.镜像和容器"></a>1.3.1.镜像和容器</h3><p>Docker中有几个重要的概念：<del>docker的镜像只能读不能写</del></p>
+<p><strong>镜像（Image）</strong>：Docker将应用程序及其所需的依赖、函数库、环境、配置等文件打包在一起，称为镜像。</p>
+<p><strong>容器（Container）</strong>：镜像中的应用程序运行后形成的进程就是<strong>容器</strong>，只是Docker会给容器进程做隔离，对外不可见。</p>
+<p>一切应用最终都是代码组成，都是硬盘中的一个个的字节形成的<strong>文件</strong>。只有运行时，才会加载到内存，形成进程。</p>
+<p>而<strong>镜像</strong>，就是把一个应用在硬盘上的文件、及其运行环境、部分系统函数库文件一起打包形成的文件包。这个文件包是只读的。</p>
+<p><strong>容器</strong>呢，就是将这些文件中编写的程序、函数加载到内存中允许，形成进程，只不过要隔离起来。因此一个镜像可以启动多次，形成多个容器进程。</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731153059464.png" alt="image-20210731153059464"></p>
+<p>例如你下载了一个QQ，如果我们将QQ在磁盘上的运行<strong>文件</strong>及其运行的操作系统依赖打包，形成QQ镜像。然后你可以启动多次，双开、甚至三开QQ，跟多个妹子聊天。</p>
+<h3 id="1-3-2-DockerHub"><a href="#1-3-2-DockerHub" class="headerlink" title="1.3.2.DockerHub"></a>1.3.2.DockerHub</h3><p>开源应用程序非常多，打包这些应用往往是重复的劳动。为了避免这些重复劳动，人们就会将自己打包的应用镜像，例如Redis、MySQL镜像放到网络上，共享使用，就像GitHub的代码共享一样。</p>
+<ul>
+<li><p>DockerHub：DockerHub是一个官方的Docker镜像的托管平台。这样的平台称为Docker Registry。</p>
+</li>
+<li><p>国内也有类似于DockerHub 的公开服务，比如 <a target="_blank" rel="noopener" href="https://c.163yun.com/hub">网易云镜像服务</a>、<a target="_blank" rel="noopener" href="https://cr.console.aliyun.com/">阿里云镜像库</a>等。</p>
+</li>
+</ul>
+<p>我们一方面可以将自己的镜像共享到DockerHub，另一方面也可以从DockerHub拉取镜像：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731153743354.png" alt="image-20210731153743354"></p>
+<h3 id="1-3-3-Docker架构"><a href="#1-3-3-Docker架构" class="headerlink" title="1.3.3.Docker架构"></a>1.3.3.Docker架构</h3><p>我们要使用Docker来操作镜像、容器，就必须要安装Docker。</p>
+<p>Docker是一个CS架构的程序，由两部分组成：</p>
+<ul>
+<li><p>服务端(server)：Docker守护进程，负责处理Docker指令，管理镜像、容器等</p>
+</li>
+<li><p>客户端(client)：通过命令或RestAPI向Docker服务端发送指令。可以在本地或远程向服务端发送指令。</p>
+</li>
+</ul>
+<p>如图：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731154257653.png" alt="image-20210731154257653"></p>
+<h3 id="1-3-4-小结"><a href="#1-3-4-小结" class="headerlink" title="1.3.4.小结"></a>1.3.4.小结</h3><p>镜像：</p>
+<ul>
+<li>将应用程序及其依赖、环境、配置打包在一起</li>
+</ul>
+<p>容器：</p>
+<ul>
+<li>镜像运行起来就是容器，一个镜像可以运行多个容器</li>
+</ul>
+<p>Docker结构：</p>
+<ul>
+<li><p>服务端：接收命令或远程请求，操作镜像或容器</p>
+</li>
+<li><p>客户端：发送命令或者请求到Docker服务端</p>
+</li>
+</ul>
+<p>DockerHub：</p>
+<ul>
+<li>一个镜像托管的服务器，类似的还有阿里云镜像服务，统称为DockerRegistry</li>
+</ul>
+<h2 id="1-4-安装Docker"><a href="#1-4-安装Docker" class="headerlink" title="1.4.安装Docker"></a>1.4.安装Docker</h2><p>企业部署一般都是采用Linux操作系统，而其中又数CentOS发行版占比最多，因此我们在CentOS下安装Docker。参考课前资料中的文档：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731155002425.png" alt="image-20210731155002425"></p>
+<h1 id="0-安装Docker"><a href="#0-安装Docker" class="headerlink" title="0.安装Docker"></a>0.安装Docker</h1><p>Docker 分为 CE 和 EE 两大版本。CE 即社区版（免费，支持周期 7 个月），EE 即企业版，强调安全，付费使用，支持周期 24 个月。</p>
+<p>Docker CE 分为 <code>stable</code> <code>test</code> 和 <code>nightly</code> 三个更新频道。</p>
+<p>官方网站上有各种环境下的 <a target="_blank" rel="noopener" href="https://docs.docker.com/install/">安装指南</a>，这里主要介绍 Docker CE 在 CentOS上的安装。</p>
+<h1 id="1-CentOS安装Docker"><a href="#1-CentOS安装Docker" class="headerlink" title="1.CentOS安装Docker"></a>1.CentOS安装Docker</h1><p>Docker CE 支持 64 位版本 CentOS 7，并且要求内核版本不低于 3.10， CentOS 7 满足最低内核的要求，所以我们在CentOS 7安装Docker。</p>
+<p>这里建议大家使用资料文件夹中提供好的虚拟机镜像</p>
+<h2 id="1-1-卸载（可选）"><a href="#1-1-卸载（可选）" class="headerlink" title="1.1.卸载（可选）"></a>1.1.卸载（可选）</h2><p>如果之前安装过旧版本的Docker，可以使用下面命令卸载：</p>
+<pre><code>yum remove docker \
+                  docker-client \
+                  docker-client-latest \
+                  docker-common \
+                  docker-latest \
+                  docker-latest-logrotate \
+                  docker-logrotate \
+                  docker-selinux \
+                  docker-engine-selinux \
+                  docker-engine \
+                  docker-ce
+</code></pre>
+<h2 id="1-2-安装docker"><a href="#1-2-安装docker" class="headerlink" title="1.2.安装docker"></a>1.2.安装docker</h2><p>首先需要大家虚拟机联网，安装yum工具</p>
+<pre><code class="sh">yum install -y yum-utils \
+           device-mapper-persistent-data \
+           lvm2 --skip-broken
+</code></pre>
+<p>然后更新本地镜像源：</p>
+<pre><code class="shell"># 设置docker镜像源
+yum-config-manager \
+    --add-repo \
+    https://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
+    
+sed -i &#39;s/download.docker.com/mirrors.aliyun.com\/docker-ce/g&#39; /etc/yum.repos.d/docker-ce.repo
+
+yum makecache fast
+</code></pre>
+<p>然后输入命令：</p>
+<pre><code class="shell">yum install -y docker-ce
+</code></pre>
+<p>docker-ce为社区免费版本。稍等片刻，docker即可安装成功。</p>
+<h2 id="1-3-启动docker"><a href="#1-3-启动docker" class="headerlink" title="1.3.启动docker"></a>1.3.启动docker</h2><p>Docker应用需要用到各种端口，逐一去修改防火墙设置。非常麻烦，因此建议大家直接关闭防火墙！</p>
+<p>启动docker前，一定要关闭防火墙后！！</p>
+<p>启动docker前，一定要关闭防火墙后！！</p>
+<p>启动docker前，一定要关闭防火墙后！！</p>
+<pre><code class="sh"># 关闭
+systemctl stop firewalld
+# 禁止开机启动防火墙
+systemctl disable firewalld
+</code></pre>
+<p>通过命令启动docker：</p>
+<pre><code class="sh">systemctl start docker  # 启动docker服务
+
+systemctl stop docker  # 停止docker服务
+
+systemctl restart docker  # 重启docker服务
+</code></pre>
+<p>然后输入命令，可以查看docker版本：</p>
+<pre><code>docker -v
+</code></pre>
+<p>如图：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\资料\assets\image-20210418154704436.png" alt="image-20210418154704436"> </p>
+<h2 id="1-4-配置镜像加速"><a href="#1-4-配置镜像加速" class="headerlink" title="1.4.配置镜像加速"></a>1.4.配置镜像加速</h2><p>docker官方镜像仓库网速较差，我们需要设置国内镜像服务：</p>
+<p>参考阿里云的镜像加速文档：<a target="_blank" rel="noopener" href="https://cr.console.aliyun.com/cn-hangzhou/instances/mirrors">https://cr.console.aliyun.com/cn-hangzhou/instances/mirrors</a></p>
+<p>有时候阿里的镜像也不稳定，可以使用我们提前提供的资料文件夹中daemon.json文件</p>
+<h1 id="2-CentOS7安装DockerCompose"><a href="#2-CentOS7安装DockerCompose" class="headerlink" title="2.CentOS7安装DockerCompose"></a>2.CentOS7安装DockerCompose</h1><h2 id="2-1-下载"><a href="#2-1-下载" class="headerlink" title="2.1.下载"></a>2.1.下载</h2><p>Linux下需要通过命令下载：</p>
+<pre><code class="sh"># 安装
+curl -L https://github.com/docker/compose/releases/download/1.23.1/docker-compose-`uname -s`-`uname -m` &gt; /usr/local/bin/docker-compose
+</code></pre>
+<p>如果下载速度较慢，或者下载失败，可以使用课前资料提供的docker-compose文件：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\资料\assets\image-20210417133020614.png" alt="image-20210417133020614"></p>
+<p>上传到<code>/usr/local/bin/</code>目录也可以。</p>
+<h2 id="2-2-修改文件权限"><a href="#2-2-修改文件权限" class="headerlink" title="2.2.修改文件权限"></a>2.2.修改文件权限</h2><p>修改文件权限：</p>
+<pre><code class="sh"># 修改权限
+chmod +x /usr/local/bin/docker-compose
+</code></pre>
+<hr>
+<hr>
+<hr>
+<h1 id="2-Docker的基本操作"><a href="#2-Docker的基本操作" class="headerlink" title="2.Docker的基本操作"></a>2.Docker的基本操作</h1><h2 id="2-1-镜像操作"><a href="#2-1-镜像操作" class="headerlink" title="2.1.镜像操作"></a>2.1.镜像操作</h2><h3 id="2-1-1-镜像名称"><a href="#2-1-1-镜像名称" class="headerlink" title="2.1.1.镜像名称"></a>2.1.1.镜像名称</h3><p>首先来看下镜像的名称组成：</p>
+<ul>
+<li>镜名称一般分两部分组成：[repository]:[tag]。</li>
+<li>在没有指定tag时，默认是latest，代表最新版本的镜像</li>
+</ul>
+<p>如图：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731155141362.png" alt="image-20210731155141362"></p>
+<p>这里的mysql就是repository，5.7就是tag，合一起就是镜像名称，代表5.7版本的MySQL镜像。</p>
+<h3 id="2-1-2-镜像命令"><a href="#2-1-2-镜像命令" class="headerlink" title="2.1.2.镜像命令"></a>2.1.2.镜像命令</h3><p>常见的镜像操作命令如图：</p>
+<p>构建镜像                        <code>docker build</code><br>推送镜像到服务             <code>docker push</code><br>从服务拉取镜像             <code>docker pull</code><br>保存镜像为一个压缩包  <code>docker save</code><br>加载压缩包为镜像          <code>docker load</code></p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731155649535.png" alt="image-20210731155649535"></p>
+<h3 id="2-1-3-案例1-拉取、查看镜像"><a href="#2-1-3-案例1-拉取、查看镜像" class="headerlink" title="2.1.3.案例1-拉取、查看镜像"></a>2.1.3.案例1-拉取、查看镜像</h3><p>需求：从DockerHub中拉取一个nginx镜像并查看</p>
+<p>1）首先去镜像仓库搜索nginx镜像，比如<a target="_blank" rel="noopener" href="https://hub.docker.com/">DockerHub</a>:</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731155844368.png" alt="image-20210731155844368"></p>
+<p>2）根据查看到的镜像名称，拉取自己需要的镜像，通过命令：docker pull nginx</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731155856199.png" alt="image-20210731155856199"></p>
+<p>3）通过命令：docker images 查看拉取到的镜像</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731155903037.png" alt="image-20210731155903037"></p>
+<h3 id="2-1-4-案例2-保存、导入镜像"><a href="#2-1-4-案例2-保存、导入镜像" class="headerlink" title="2.1.4.案例2-保存、导入镜像"></a>2.1.4.案例2-保存、导入镜像</h3><p>需求：利用docker save将nginx镜像导出磁盘，然后再通过load加载回来</p>
+<p>1）利用docker xx –help命令查看docker save和docker load的语法</p>
+<p>例如，查看save命令用法，可以输入命令：</p>
+<pre><code class="sh">docker save --help
+</code></pre>
+<p>结果：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731161104732.png" alt="image-20210731161104732"></p>
+<p>命令格式：</p>
+<pre><code class="shell">docker save -o [保存的目标文件名称] [镜像名称]
+</code></pre>
+<p>2）使用docker save导出镜像到磁盘 </p>
+<p>运行命令：</p>
+<pre><code class="sh">docker save -o nginx.tar nginx:latest
+</code></pre>
+<p>结果如图：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731161354344.png" alt="image-20210731161354344"></p>
+<p>3）使用docker load加载镜像</p>
+<p>先删除本地的nginx镜像：</p>
+<pre><code class="sh">docker rmi nginx:latest
+</code></pre>
+<p>然后运行命令，加载本地文件：</p>
+<pre><code class="sh">docker load -i nginx.tar
+</code></pre>
+<p>结果：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731161746245.png" alt="image-20210731161746245"></p>
+<h3 id="2-1-5-练习"><a href="#2-1-5-练习" class="headerlink" title="2.1.5.练习"></a>2.1.5.练习</h3><p>需求：去DockerHub搜索并拉取一个Redis镜像</p>
+<p>目标：</p>
+<p>1）去DockerHub搜索Redis镜像</p>
+<p>2）查看Redis镜像的名称和版本</p>
+<p>3）利用docker pull命令拉取镜像</p>
+<p>4）利用docker save命令将 redis:latest打包为一个redis.tar包</p>
+<p>5）利用docker rmi 删除本地的redis:latest</p>
+<p>6）利用docker load 重新加载 redis.tar文件</p>
+<h2 id="2-2-容器操作"><a href="#2-2-容器操作" class="headerlink" title="2.2.容器操作"></a>2.2.容器操作</h2><h3 id="2-2-1-容器相关命令"><a href="#2-2-1-容器相关命令" class="headerlink" title="2.2.1.容器相关命令"></a>2.2.1.容器相关命令</h3><p>容器操作的命令如图：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731161950495.png" alt="image-20210731161950495"></p>
+<p>容器保护三个状态：</p>
+<ul>
+<li>运行：进程正常运行</li>
+<li>暂停：进程暂停，CPU不再运行，并不释放内存</li>
+<li>停止：进程终止，回收进程占用的内存、CPU等资源</li>
+</ul>
+<p>其中：</p>
+<ul>
+<li><p>docker run：创建并运行一个容器，处于运行状态</p>
+</li>
+<li><p>docker pause：让一个运行的容器暂停</p>
+</li>
+<li><p>docker unpause：让一个容器从暂停状态恢复运行</p>
+</li>
+<li><p>docker stop：停止一个运行的容器</p>
+</li>
+<li><p>docker start：让一个停止的容器再次运行</p>
+</li>
+<li><p>docker rm：删除一个容器</p>
+</li>
+</ul>
+<h3 id="2-2-2-案例-创建并运行一个容器"><a href="#2-2-2-案例-创建并运行一个容器" class="headerlink" title="2.2.2.案例-创建并运行一个容器"></a>2.2.2.案例-创建并运行一个容器</h3><p>创建并运行nginx容器的命令：</p>
+<pre><code class="sh">docker run --name containerName -p 80:80 -d nginx
+</code></pre>
+<p>命令解读：</p>
+<ul>
+<li>docker run ：创建并运行一个容器</li>
+<li>–name : 给容器起一个名字，比如叫做mn</li>
+<li>-p ：将宿主机端口与容器端口映射，冒号左侧是宿主机端口，右侧是容器端口</li>
+<li>-d：后台运行容器</li>
+<li>nginx：镜像名称，例如nginx</li>
+</ul>
+<p>这里的<code>-p</code>参数，是将容器端口映射到宿主机端口。</p>
+<p>默认情况下，容器是隔离环境，我们直接访问宿主机的80端口，肯定访问不到容器中的nginx。</p>
+<p>现在，将容器的80与宿主机的80关联起来，当我们访问宿主机的80端口时，就会被映射到容器的80，这样就能访问到nginx了：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731163255863.png" alt="image-20210731163255863"></p>
+<h3 id="2-2-3-案例-进入容器，修改文件"><a href="#2-2-3-案例-进入容器，修改文件" class="headerlink" title="2.2.3.案例-进入容器，修改文件"></a>2.2.3.案例-进入容器，修改文件</h3><p><strong>需求</strong>：进入Nginx容器，修改HTML文件内容，添加“传智教育欢迎您”</p>
+<p><strong>提示</strong>：进入容器要用到docker exec命令。</p>
+<p><strong>步骤</strong>：</p>
+<p>1）进入容器。进入我们刚刚创建的nginx容器的命令为：</p>
+<pre><code class="sh">docker exec -it mn bash
+</code></pre>
+<p>命令解读：</p>
+<ul>
+<li><p>docker exec ：进入容器内部，执行一个命令</p>
+</li>
+<li><p>-it : 给当前进入的容器创建一个标准输入、输出终端，允许我们与容器交互</p>
+</li>
+<li><p>mn ：要进入的容器的名称</p>
+</li>
+<li><p>bash：进入容器后执行的命令，bash是一个linux终端交互命令</p>
+</li>
+</ul>
+<p>2）进入nginx的HTML所在目录 &#x2F;usr&#x2F;share&#x2F;nginx&#x2F;html</p>
+<p>容器内部会模拟一个独立的Linux文件系统，看起来如同一个linux服务器一样：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731164159811.png" alt="image-20210731164159811"></p>
+<p>nginx的环境、配置、运行文件全部都在这个文件系统中，包括我们要修改的html文件。</p>
+<p>查看DockerHub网站中的nginx页面，可以知道nginx的html目录位置在<code>/usr/share/nginx/html</code></p>
+<p>我们执行命令，进入该目录：</p>
+<pre><code class="sh">cd /usr/share/nginx/html
+</code></pre>
+<p> 查看目录下文件：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731164455818.png" alt="image-20210731164455818"></p>
+<p>3）修改index.html的内容</p>
+<p>容器内没有vi命令，无法直接修改，我们用下面的命令来修改：</p>
+<pre><code class="sh">sed -i -e &#39;s#Welcome to nginx#传智教育欢迎您#g&#39; -e &#39;s#&lt;head&gt;#&lt;head&gt;&lt;meta charset=&quot;utf-8&quot;&gt;#g&#39; index.html
+</code></pre>
+<p>在浏览器访问自己的虚拟机地址，例如我的是：<a href="http://192.168.150.101，即可看到结果：">http://192.168.150.101，即可看到结果：</a></p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731164717604.png" alt="image-20210731164717604"></p>
+<h3 id="2-2-4-小结"><a href="#2-2-4-小结" class="headerlink" title="2.2.4.小结"></a>2.2.4.小结</h3><p>docker run命令的常见参数有哪些？</p>
+<ul>
+<li>–name：指定容器名称</li>
+<li>-p：指定端口映射</li>
+<li>-d：让容器后台运行</li>
+</ul>
+<p>查看容器日志的命令：</p>
+<ul>
+<li>docker logs</li>
+<li>添加 -f 参数可以持续查看日志</li>
+</ul>
+<p>查看容器状态：</p>
+<ul>
+<li>docker ps</li>
+<li>docker ps -a 查看所有容器，包括已经停止的</li>
+</ul>
+<h2 id="2-3-数据卷（容器数据管理）"><a href="#2-3-数据卷（容器数据管理）" class="headerlink" title="2.3.数据卷（容器数据管理）"></a>2.3.数据卷（容器数据管理）</h2><p>在之前的nginx案例中，修改nginx的html页面时，需要进入nginx内部。并且因为没有编辑器，修改文件也很麻烦。</p>
+<p>这就是因为容器与数据（容器内文件）耦合带来的后果。</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731172440275.png" alt="image-20210731172440275"></p>
+<p>要解决这个问题，必须将数据与容器解耦，这就要用到数据卷了。</p>
+<h3 id="2-3-1-什么是数据卷"><a href="#2-3-1-什么是数据卷" class="headerlink" title="2.3.1.什么是数据卷"></a>2.3.1.什么是数据卷</h3><p><strong>数据卷（volume）</strong>是一个虚拟目录，指向宿主机文件系统中的某个目录。</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731173541846.png" alt="image-20210731173541846"></p>
+<p>一旦完成数据卷挂载，对容器的一切操作都会作用在数据卷对应的宿主机目录了。</p>
+<p>这样，我们操作宿主机的&#x2F;var&#x2F;lib&#x2F;docker&#x2F;volumes&#x2F;html目录，就等于操作容器内的&#x2F;usr&#x2F;share&#x2F;nginx&#x2F;html目录了</p>
+<h3 id="2-3-2-数据集操作命令"><a href="#2-3-2-数据集操作命令" class="headerlink" title="2.3.2.数据集操作命令"></a>2.3.2.数据集操作命令</h3><p>数据卷操作的基本语法如下：</p>
+<pre><code class="sh">docker volume [COMMAND]
+</code></pre>
+<p>docker volume命令是数据卷操作，根据命令后跟随的command来确定下一步的操作：</p>
+<ul>
+<li>create 创建一个volume</li>
+<li>inspect 显示一个或多个volume的信息</li>
+<li>ls 列出所有的volume</li>
+<li>rm 删除一个或多个指定的volume</li>
+</ul>
+<h3 id="2-3-3-创建和查看数据卷"><a href="#2-3-3-创建和查看数据卷" class="headerlink" title="2.3.3.创建和查看数据卷"></a>2.3.3.创建和查看数据卷</h3><p><strong>需求</strong>：创建一个数据卷，并查看数据卷在宿主机的目录位置</p>
+<p>① 创建数据卷</p>
+<pre><code class="sh">docker volume create html
+</code></pre>
+<p>② 查看所有数据</p>
+<pre><code class="sh">docker volume ls
+</code></pre>
+<p>结果：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731173746910.png" alt="image-20210731173746910"></p>
+<p>③ 查看数据卷详细信息卷</p>
+<pre><code class="sh">docker volume inspect html
+</code></pre>
+<p>结果：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731173809877.png" alt="image-20210731173809877"></p>
+<p>可以看到，我们创建的html这个数据卷关联的宿主机目录为<code>/var/lib/docker/volumes/html/_data</code>目录。</p>
+<p><strong>小结</strong>：</p>
+<p>数据卷的作用：</p>
+<ul>
+<li>将容器与数据分离，解耦合，方便操作容器内数据，保证数据安全</li>
+</ul>
+<p>数据卷操作：</p>
+<ul>
+<li>docker volume create：创建数据卷</li>
+<li>docker volume ls：查看所有数据卷</li>
+<li>docker volume inspect：查看数据卷详细信息，包括关联的宿主机目录位置</li>
+<li>docker volume rm：删除指定数据卷</li>
+</ul>
+<h3 id="2-3-4-挂载数据卷"><a href="#2-3-4-挂载数据卷" class="headerlink" title="2.3.4.挂载数据卷"></a>2.3.4.挂载数据卷</h3><p>我们在创建容器时，可以通过 -v 参数来挂载一个数据卷到某个容器内目录，命令格式如下：</p>
+<pre><code class="sh">docker run \
+  --name mn \
+  -v html:/root/html \
+  -p 8080:80
+  nginx \
+</code></pre>
+<p>这里的-v就是挂载数据卷的命令：</p>
+<ul>
+<li><code>-v html:/root/htm</code> ：把html数据卷挂载到容器内的&#x2F;root&#x2F;html这个目录中</li>
+</ul>
+<h3 id="2-3-5-案例-给nginx挂载数据卷"><a href="#2-3-5-案例-给nginx挂载数据卷" class="headerlink" title="2.3.5.案例-给nginx挂载数据卷"></a>2.3.5.案例-给nginx挂载数据卷</h3><p><strong>需求</strong>：创建一个nginx容器，修改容器内的html目录内的index.html内容</p>
+<p><strong>分析</strong>：上个案例中，我们进入nginx容器内部，已经知道nginx的html目录所在位置&#x2F;usr&#x2F;share&#x2F;nginx&#x2F;html ，我们需要把这个目录挂载到html这个数据卷上，方便操作其中的内容。</p>
+<p><strong>提示</strong>：运行容器时使用 -v 参数挂载数据卷</p>
+<p>步骤：</p>
+<p>① 创建容器并挂载数据卷到容器内的HTML目录</p>
+<pre><code class="sh">docker run --name mn -v html:/usr/share/nginx/html -p 80:80 -d nginx
+</code></pre>
+<p>② 进入html数据卷所在位置，并修改HTML内容</p>
+<pre><code class="sh"># 查看html数据卷的位置
+docker volume inspect html
+# 进入该目录
+cd /var/lib/docker/volumes/html/_data
+# 修改文件
+vi index.html
+</code></pre>
+<h3 id="2-3-6-案例-给MySQL挂载本地目录"><a href="#2-3-6-案例-给MySQL挂载本地目录" class="headerlink" title="2.3.6.案例-给MySQL挂载本地目录"></a>2.3.6.案例-给MySQL挂载本地目录</h3><p>容器不仅仅可以挂载数据卷，也可以直接挂载到宿主机目录上。关联关系如下：</p>
+<ul>
+<li>带数据卷模式：宿主机目录 –&gt; 数据卷 —&gt; 容器内目录</li>
+<li>直接挂载模式：宿主机目录 —&gt; 容器内目录</li>
+</ul>
+<p>如图：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731175155453.png" alt="image-20210731175155453"></p>
+<p><strong>语法</strong>：</p>
+<p>目录挂载与数据卷挂载的语法是类似的：</p>
+<ul>
+<li>-v [宿主机目录]:[容器内目录]</li>
+<li>-v [宿主机文件]:[容器内文件]</li>
+</ul>
+<p><strong>需求</strong>：创建并运行一个MySQL容器，将宿主机目录直接挂载到容器</p>
+<p>实现思路如下：</p>
+<p>1）在将课前资料中的mysql.tar文件上传到虚拟机，通过load命令加载为镜像</p>
+<p>2）创建目录&#x2F;tmp&#x2F;mysql&#x2F;data</p>
+<p>3）创建目录&#x2F;tmp&#x2F;mysql&#x2F;conf，将课前资料提供的hmy.cnf文件上传到&#x2F;tmp&#x2F;mysql&#x2F;conf</p>
+<p>4）去DockerHub查阅资料，创建并运行MySQL容器，要求：</p>
+<p>① 挂载&#x2F;tmp&#x2F;mysql&#x2F;data到mysql容器内数据存储目录</p>
+<p>② 挂载&#x2F;tmp&#x2F;mysql&#x2F;conf&#x2F;hmy.cnf到mysql容器的配置文件</p>
+<p>③ 设置MySQL密码</p>
+<h3 id="2-3-7-小结"><a href="#2-3-7-小结" class="headerlink" title="2.3.7.小结"></a>2.3.7.小结</h3><p>docker run的命令中通过 -v 参数挂载文件或目录到容器中：</p>
+<ul>
+<li>-v volume名称:容器内目录</li>
+<li>-v 宿主机文件:容器内文</li>
+<li>-v 宿主机目录:容器内目录</li>
+</ul>
+<p>数据卷挂载与目录直接挂载的</p>
+<ul>
+<li>数据卷挂载耦合度低，由docker来管理目录，但是目录较深，不好找</li>
+<li>目录挂载耦合度高，需要我们自己管理目录，不过目录容易寻找查看</li>
+</ul>
+<h1 id="3-Dockerfile自定义镜像"><a href="#3-Dockerfile自定义镜像" class="headerlink" title="3.Dockerfile自定义镜像"></a>3.Dockerfile自定义镜像</h1><p>常见的镜像在DockerHub就能找到，但是我们自己写的项目就必须自己构建镜像了。</p>
+<p>而要自定义镜像，就必须先了解镜像的结构才行。</p>
+<h2 id="3-1-镜像结构"><a href="#3-1-镜像结构" class="headerlink" title="3.1.镜像结构"></a>3.1.镜像结构</h2><p>镜像是将应用程序及其需要的系统函数库、环境、配置、依赖打包而成。</p>
+<p>我们以MySQL为例，来看看镜像的组成结构：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731175806273.png" alt="image-20210731175806273"></p>
+<p>简单来说，镜像就是在系统函数库、运行环境基础上，添加应用程序文件、配置文件、依赖文件等组合，然后编写好启动脚本打包在一起形成的文件。</p>
+<p>我们要构建镜像，其实就是实现上述打包的过程。</p>
+<h2 id="3-2-Dockerfile语法"><a href="#3-2-Dockerfile语法" class="headerlink" title="3.2.Dockerfile语法"></a>3.2.Dockerfile语法</h2><p>构建自定义的镜像时，并不需要一个个文件去拷贝，打包。</p>
+<p>我们只需要告诉Docker，我们的镜像的组成，需要哪些BaseImage、需要拷贝什么文件、需要安装什么依赖、启动脚本是什么，将来Docker会帮助我们构建镜像。</p>
+<p>而描述上述信息的文件就是Dockerfile文件。</p>
+<p><strong>Dockerfile</strong>就是一个文本文件，其中包含一个个的**指令(Instruction)**，用指令来说明要执行什么操作来构建镜像。每一个指令都会形成一层Layer。</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731180321133.png" alt="image-20210731180321133"></p>
+<p>更新详细语法说明，请参考官网文档： <a target="_blank" rel="noopener" href="https://docs.docker.com/engine/reference/builder">https://docs.docker.com/engine/reference/builder</a></p>
+<h2 id="3-3-构建Java项目"><a href="#3-3-构建Java项目" class="headerlink" title="3.3.构建Java项目"></a>3.3.构建Java项目</h2><h3 id="3-3-1-基于Ubuntu构建Java项目"><a href="#3-3-1-基于Ubuntu构建Java项目" class="headerlink" title="3.3.1.基于Ubuntu构建Java项目"></a>3.3.1.基于Ubuntu构建Java项目</h3><p>需求：基于Ubuntu镜像构建一个新镜像，运行一个java项目</p>
+<ul>
+<li><p>步骤1：新建一个空文件夹docker-demo</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210801101207444.png" alt="image-20210801101207444"></p>
+</li>
+<li><p>步骤2：拷贝课前资料中的docker-demo.jar文件到docker-demo这个目录</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210801101314816.png" alt="image-20210801101314816"></p>
+</li>
+<li><p>步骤3：拷贝课前资料中的jdk8.tar.gz文件到docker-demo这个目录</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210801101410200.png" alt="image-20210801101410200"></p>
+</li>
+<li><p>步骤4：拷贝课前资料提供的Dockerfile到docker-demo这个目录</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210801101455590.png" alt="image-20210801101455590"></p>
+<p>其中的内容如下：</p>
+<pre><code class="dockerfile"># 指定基础镜像
+FROM ubuntu:16.04
+# 配置环境变量，JDK的安装目录
+ENV JAVA_DIR=/usr/local
+
+# 拷贝jdk和java项目的包
+COPY ./jdk8.tar.gz $JAVA_DIR/
+COPY ./docker-demo.jar /tmp/app.jar
+
+# 安装JDK
+RUN cd $JAVA_DIR \
+ &amp;&amp; tar -xf ./jdk8.tar.gz \
+ &amp;&amp; mv ./jdk1.8.0_144 ./java8
+
+# 配置环境变量
+ENV JAVA_HOME=$JAVA_DIR/java8
+ENV PATH=$PATH:$JAVA_HOME/bin
+
+# 暴露端口
+EXPOSE 8090
+# 入口，java项目的启动命令
+ENTRYPOINT java -jar /tmp/app.jar
+</code></pre>
+</li>
+<li><p>步骤5：进入docker-demo</p>
+<p>将准备好的docker-demo上传到虚拟机任意目录，然后进入docker-demo目录下</p>
+</li>
+<li><p>步骤6：运行命令：</p>
+<pre><code class="sh">docker build -t javaweb:1.0 .
+</code></pre>
+<p>步骤7：启动容器：</p>
+<pre><code>docker run --name javaweb -d -p 8090:8090 javaweb:1.0
+</code></pre>
+</li>
+</ul>
+<p>最后访问 <a target="_blank" rel="noopener" href="http://192.168.150.101:8090/hello/count%EF%BC%8C%E5%85%B6%E4%B8%AD%E7%9A%84ip%E6%94%B9%E6%88%90%E4%BD%A0%E7%9A%84%E8%99%9A%E6%8B%9F%E6%9C%BAip">http://192.168.150.101:8090/hello/count，其中的ip改成你的虚拟机ip</a></p>
+<h3 id="3-3-2-基于java8构建Java项目"><a href="#3-3-2-基于java8构建Java项目" class="headerlink" title="3.3.2.基于java8构建Java项目"></a>3.3.2.基于java8构建Java项目</h3><p>虽然我们可以基于Ubuntu基础镜像，添加任意自己需要的安装包，构建镜像，但是却比较麻烦。所以大多数情况下，我们都可以在一些安装了部分软件的基础镜像上做改造。</p>
+<p>例如，构建java项目的镜像，可以在已经准备了JDK的基础镜像基础上构建。</p>
+<p>需求：基于openjdk:8-jre-alpine镜像，将一个Java项目构建为镜像</p>
+<p>实现思路如下：</p>
+<p>Dockerfile修改如下：</p>
+<pre><code class="dockerfile"># 指定基础镜像
+FROM openjdk:8-jre-alpine
+COPY ./docker-demo.jar /tmp/app.jar
+# 暴露端口
+EXPOSE 8090
+# 入口，java项目的启动命令
+ENTRYPOINT java -jar /tmp/app.jar
+</code></pre>
+<h2 id="3-4-小结"><a href="#3-4-小结" class="headerlink" title="3.4.小结"></a>3.4.小结</h2><p>小结：</p>
+<ol>
+<li><p>Dockerfile的本质是一个文件，通过指令描述镜像的构建过程</p>
+</li>
+<li><p>Dockerfile的第一行必须是FROM，从一个基础镜像来构建</p>
+</li>
+<li><p>基础镜像可以是基本操作系统，如Ubuntu。也可以是其他人制作好的镜像，例如：openjdk:8-jre-alpine</p>
+</li>
+</ol>
+<h1 id="4-Docker-Compose"><a href="#4-Docker-Compose" class="headerlink" title="4.Docker-Compose"></a>4.Docker-Compose</h1><p>Docker Compose可以基于Compose文件帮我们快速的部署分布式应用，而无需手动一个个创建和运行容器！</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731180921742.png" alt="image-20210731180921742"></p>
+<h2 id="4-1-初识DockerCompose"><a href="#4-1-初识DockerCompose" class="headerlink" title="4.1.初识DockerCompose"></a>4.1.初识DockerCompose</h2><p>Compose文件是一个文本文件，通过指令定义集群中的每个容器如何运行。格式如下：</p>
+<pre><code class="json">version: &quot;3.8&quot;
+ services:
+  mysql:
+    image: mysql:5.7.25
+    environment:
+     MYSQL_ROOT_PASSWORD: 123 
+    volumes:
+     - &quot;/tmp/mysql/data:/var/lib/mysql&quot;
+     - &quot;/tmp/mysql/conf/hmy.cnf:/etc/mysql/conf.d/hmy.cnf&quot;
+  web:
+    build: .
+    ports:
+     - &quot;8090:8090&quot;
+</code></pre>
+<p>上面的Compose文件就描述一个项目，其中包含两个容器：</p>
+<ul>
+<li>mysql：一个基于<code>mysql:5.7.25</code>镜像构建的容器，并且挂载了两个目录</li>
+<li>web：一个基于<code>docker build</code>临时构建的镜像容器，映射端口时8090</li>
+</ul>
+<p>DockerCompose的详细语法参考官网：<a target="_blank" rel="noopener" href="https://docs.docker.com/compose/compose-file/">https://docs.docker.com/compose/compose-file/</a></p>
+<p>其实DockerCompose文件可以看做是将多个docker run命令写到一个文件，只是语法稍有差异。</p>
+<h2 id="4-2-安装DockerCompose"><a href="#4-2-安装DockerCompose" class="headerlink" title="4.2.安装DockerCompose"></a>4.2.安装DockerCompose</h2><p>参考课前资料 Centos7安装Docker</p>
+<h2 id="4-3-部署微服务集群"><a href="#4-3-部署微服务集群" class="headerlink" title="4.3.部署微服务集群"></a>4.3.部署微服务集群</h2><p><strong>需求</strong>：将之前学习的cloud-demo微服务集群利用DockerCompose部署</p>
+<p><strong>实现思路</strong>：</p>
+<p>① 查看课前资料提供的cloud-demo文件夹，里面已经编写好了docker-compose文件</p>
+<p>② 将cloud-demo上传至虚拟机，利用 docker-compose up -d 来部署</p>
+<h3 id="4-3-1-compose文件"><a href="#4-3-1-compose文件" class="headerlink" title="4.3.1.compose文件"></a>4.3.1.compose文件</h3><p>查看课前资料提供的cloud-demo文件夹，里面已经编写好了docker-compose文件，而且每个微服务都准备了一个独立的目录：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210731181341330.png" alt="image-20210731181341330"></p>
+<p>内容如下：</p>
+<pre><code class="yaml">version: &quot;3.2&quot;
+
+services:
+  nacos:
+    image: nacos/nacos-server
+    environment:
+      MODE: standalone
+    ports:
+      - &quot;8848:8848&quot;
+  mysql:
+    image: mysql:5.7.25
+    environment:
+      MYSQL_ROOT_PASSWORD: 123
+    volumes:
+      - &quot;$PWD/mysql/data:/var/lib/mysql&quot;
+      - &quot;$PWD/mysql/conf:/etc/mysql/conf.d/&quot;
+  userservice:
+    build: ./user-service
+  orderservice:
+    build: ./order-service
+  gateway:
+    build: ./gateway
+    ports:
+      - &quot;10010:10010&quot;
+</code></pre>
+<p>可以看到，其中包含5个service服务：</p>
+<ul>
+<li><code>nacos</code>：作为注册中心和配置中心<ul>
+<li><code>image: nacos/nacos-server</code>： 基于nacos&#x2F;nacos-server镜像构建</li>
+<li><code>environment</code>：环境变量<ul>
+<li><code>MODE: standalone</code>：单点模式启动</li>
+</ul>
+</li>
+<li><code>ports</code>：端口映射，这里暴露了8848端口</li>
+</ul>
+</li>
+<li><code>mysql</code>：数据库<ul>
+<li><code>image: mysql:5.7.25</code>：镜像版本是mysql:5.7.25</li>
+<li><code>environment</code>：环境变量<ul>
+<li><code>MYSQL_ROOT_PASSWORD: 123</code>：设置数据库root账户的密码为123</li>
+</ul>
+</li>
+<li><code>volumes</code>：数据卷挂载，这里挂载了mysql的data、conf目录，其中有我提前准备好的数据</li>
+</ul>
+</li>
+<li><code>userservice</code>、<code>orderservice</code>、<code>gateway</code>：都是基于Dockerfile临时构建的</li>
+</ul>
+<p>查看mysql目录，可以看到其中已经准备好了cloud_order、cloud_user表：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210801095205034.png" alt="image-20210801095205034"></p>
+<p>查看微服务目录，可以看到都包含Dockerfile文件：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210801095320586.png" alt="image-20210801095320586"></p>
+<p>内容如下：</p>
+<pre><code class="dockerfile">FROM java:8-alpine
+COPY ./app.jar /tmp/app.jar
+ENTRYPOINT java -jar /tmp/app.jar
+</code></pre>
+<h3 id="4-3-2-部署"><a href="#4-3-2-部署" class="headerlink" title="4.3.2.部署"></a>4.3.2.部署</h3><p>最后，我们需要将文件整个cloud-demo文件夹上传到虚拟机中，理由DockerCompose部署。</p>
+<p>上传到任意目录：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day03-Docker\讲义\md\assets\image-20210801100955653.png" alt="image-20210801100955653"></p>
+<p>部署：</p>
+<p>进入cloud-demo目录，然后运行下面的命令：</p>
+<pre><code class="sh">docker-compose up -d
+</code></pre>
+<hr>
+<hr>
+<h1 id="RabbitMQ"><a href="#RabbitMQ" class="headerlink" title="RabbitMQ"></a>RabbitMQ</h1><h1 id="1-初识MQ"><a href="#1-初识MQ" class="headerlink" title="1.初识MQ"></a>1.初识MQ</h1><h2 id="1-1-同步和异步通讯"><a href="#1-1-同步和异步通讯" class="headerlink" title="1.1.同步和异步通讯"></a>1.1.同步和异步通讯</h2><p>微服务间通讯有同步和异步两种方式：</p>
+<p>同步通讯：就像打电话，需要实时响应。</p>
+<p>异步通讯：就像发邮件，不需要马上回复。</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day04-MQ\讲义\md\assets\image-20210717161939695.png" alt="image-20210717161939695"></p>
+<p>两种方式各有优劣，打电话可以立即得到响应，但是你却不能跟多个人同时通话。发送邮件可以同时与多个人收发邮件，但是往往响应会有延迟。</p>
+<h3 id="1-1-1-同步通讯"><a href="#1-1-1-同步通讯" class="headerlink" title="1.1.1.同步通讯"></a>1.1.1.同步通讯</h3><p>我们之前学习的Feign调用就属于同步方式，虽然调用可以实时得到结果，但存在下面的问题：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day04-MQ\讲义\md\assets\image-20210717162004285.png" alt="image-20210717162004285"></p>
+<p>总结：</p>
+<p>同步调用的优点：</p>
+<ul>
+<li>时效性较强，可以立即得到结果</li>
+</ul>
+<p>同步调用的问题：</p>
+<ul>
+<li>耦合度高</li>
+<li>性能和吞吐能力下降</li>
+<li>有额外的资源消耗</li>
+<li>有级联失败问题</li>
+</ul>
+<h3 id="1-1-2-异步通讯"><a href="#1-1-2-异步通讯" class="headerlink" title="1.1.2.异步通讯"></a>1.1.2.异步通讯</h3><p>异步调用则可以避免上述问题：</p>
+<p>我们以购买商品为例，用户支付后需要调用订单服务完成订单状态修改，调用物流服务，从仓库分配响应的库存并准备发货。</p>
+<p>在事件模式中，支付服务是事件发布者（publisher），在支付完成后只需要发布一个支付成功的事件（event），事件中带上订单id。</p>
+<p>订单服务和物流服务是事件订阅者（Consumer），订阅支付成功的事件，监听到事件后完成自己业务即可。</p>
+<p>为了解除事件发布者与订阅者之间的耦合，两者并不是直接通信，而是有一个中间人（Broker）。发布者发布事件到Broker，不关心谁来订阅事件。订阅者从Broker订阅事件，不关心谁发来的消息。</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day04-MQ\讲义\md\assets\image-20210422095356088.png" alt="image-20210422095356088"></p>
+<p>Broker 是一个像数据总线一样的东西，所有的服务要接收数据和发送数据都发到这个总线上，这个总线就像协议一样，让服务间的通讯变得标准和可控。</p>
+<p>好处：</p>
+<ul>
+<li><p>吞吐量提升：无需等待订阅者处理完成，响应更快速</p>
+</li>
+<li><p>故障隔离：服务没有直接调用，不存在级联失败问题</p>
+</li>
+<li><p>调用间没有阻塞，不会造成无效的资源占用</p>
+</li>
+<li><p>耦合度极低，每个服务都可以灵活插拔，可替换</p>
+</li>
+<li><p>流量削峰：不管发布事件的流量波动多大，都由Broker接收，订阅者可以按照自己的速度去处理事件</p>
+</li>
+</ul>
+<p>缺点：</p>
+<ul>
+<li>不能马上拿到结果，实时性比较弱</li>
+<li>架构复杂了，业务没有明显的流程线，不好管理</li>
+<li>需要依赖于Broker的可靠、安全、性能</li>
+</ul>
+<p>注意点：不是所有的场景都能改造成异步通信</p>
+<p>好在现在开源软件或云平台上 Broker 的软件是非常成熟的，比较常见的一种就是我们今天要学习的MQ技术。</p>
+<h2 id="1-2-技术对比："><a href="#1-2-技术对比：" class="headerlink" title="1.2.技术对比："></a>1.2.技术对比：</h2><p>MQ，中文是消息队列（MessageQueue），字面来看就是存放消息的队列。也就是事件驱动架构中的Broker。</p>
+<p>比较常见的MQ实现：</p>
+<ul>
+<li>ActiveMQ</li>
+<li>RabbitMQ</li>
+<li>RocketMQ</li>
+<li>Kafka</li>
+</ul>
+<p>几种常见MQ的对比：</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><strong>RabbitMQ</strong></th>
+<th><strong>ActiveMQ</strong></th>
+<th><strong>RocketMQ</strong></th>
+<th><strong>Kafka</strong></th>
+</tr>
+</thead>
+<tbody><tr>
+<td>公司&#x2F;社区</td>
+<td>Rabbit</td>
+<td>Apache</td>
+<td>阿里</td>
+<td>Apache</td>
+</tr>
+<tr>
+<td>开发语言</td>
+<td>Erlang</td>
+<td>Java</td>
+<td>Java</td>
+<td>Scala&amp;Java</td>
+</tr>
+<tr>
+<td>协议支持</td>
+<td>AMQP，XMPP，SMTP，STOMP</td>
+<td>OpenWire,STOMP，REST,XMPP,AMQP</td>
+<td>自定义协议</td>
+<td>自定义协议</td>
+</tr>
+<tr>
+<td>可用性[能否搭集群]</td>
+<td>高</td>
+<td>一般</td>
+<td>高</td>
+<td>高</td>
+</tr>
+<tr>
+<td>单机吞吐量</td>
+<td>一般</td>
+<td>差</td>
+<td>高</td>
+<td>非常高</td>
+</tr>
+<tr>
+<td>消息可靠性</td>
+<td>高</td>
+<td>一般</td>
+<td>高</td>
+<td>一般</td>
+</tr>
+</tbody></table>
+<p>追求可用性：Kafka、 RocketMQ 、RabbitMQ</p>
+<p>追求可靠性：RabbitMQ、RocketMQ</p>
+<p>追求吞吐能力：RocketMQ、Kafka</p>
+<p>追求消息低延迟：RabbitMQ、Kafka</p>
+<h1 id="2-快速入门"><a href="#2-快速入门" class="headerlink" title="2.快速入门"></a>2.快速入门</h1><h2 id="2-1-安装RabbitMQ"><a href="#2-1-安装RabbitMQ" class="headerlink" title="2.1.安装RabbitMQ"></a>2.1.安装RabbitMQ</h2><p>安装RabbitMQ，参考课前资料：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day04-MQ\讲义\md\assets\image-20210717162628635.png" alt="image-20210717162628635"></p>
+<h1 id="RabbitMQ部署指南"><a href="#RabbitMQ部署指南" class="headerlink" title="RabbitMQ部署指南"></a>RabbitMQ部署指南</h1><h1 id="1-单机部署"><a href="#1-单机部署" class="headerlink" title="1.单机部署"></a>1.单机部署</h1><p>我们在Centos7虚拟机中使用Docker来安装。</p>
+<h2 id="1-1-下载镜像"><a href="#1-1-下载镜像" class="headerlink" title="1.1.下载镜像"></a>1.1.下载镜像</h2><p>方式一：在线拉取</p>
+<pre><code class="sh">docker pull rabbitmq:3.8-management
+</code></pre>
+<p>方式二：从本地加载</p>
+<p>在课前资料已经提供了镜像包：</p>
+<p><img src="E:\项目二\资料\微服务\senior\day03-MQ高级\资料\assets\image-20210423191210349.png" alt="image-20210423191210349"> </p>
+<p>上传到虚拟机中后，使用命令加载镜像即可：</p>
+<pre><code class="sh">docker load -i mq.tar
+</code></pre>
+<h2 id="1-2-安装MQ"><a href="#1-2-安装MQ" class="headerlink" title="1.2.安装MQ"></a>1.2.安装MQ</h2><p>执行下面的命令来运行MQ容器：</p>
+<pre><code class="sh">docker run \
+ -e RABBITMQ_DEFAULT_USER=itcast \
+ -e RABBITMQ_DEFAULT_PASS=123321 \
+ -v mq-plugins:/plugins \
+ --name mq \
+ --hostname mq1 \
+ -p 15672:15672 \
+ -p 5672:5672 \
+ -d \
+ rabbitmq:3.8-management
+</code></pre>
+<h1 id="3-集群部署"><a href="#3-集群部署" class="headerlink" title="3.集群部署"></a>3.集群部署</h1><p>接下来，我们看看如何安装RabbitMQ的集群。</p>
+<h2 id="2-1-集群分类"><a href="#2-1-集群分类" class="headerlink" title="2.1.集群分类"></a>2.1.集群分类</h2><p>在RabbitMQ的官方文档中，讲述了两种集群的配置方式：</p>
+<ul>
+<li>普通模式：普通模式集群不进行数据同步，每个MQ都有自己的队列、数据信息（其它元数据信息如交换机等会同步）。例如我们有2个MQ：mq1，和mq2，如果你的消息在mq1，而你连接到了mq2，那么mq2会去mq1拉取消息，然后返回给你。如果mq1宕机，消息就会丢失。</li>
+<li>镜像模式：与普通模式不同，队列会在各个mq的镜像节点之间同步，因此你连接到任何一个镜像节点，均可获取到消息。而且如果一个节点宕机，并不会导致数据丢失。不过，这种方式增加了数据同步的带宽消耗。</li>
+</ul>
+<p>我们先来看普通模式集群，我们的计划部署3节点的mq集群：</p>
+<table>
+<thead>
+<tr>
+<th>主机名</th>
+<th>控制台端口</th>
+<th>amqp通信端口</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>mq1</td>
+<td>8081 —&gt; 15672</td>
+<td>8071 —&gt; 5672</td>
+</tr>
+<tr>
+<td>mq2</td>
+<td>8082 —&gt; 15672</td>
+<td>8072 —&gt; 5672</td>
+</tr>
+<tr>
+<td>mq3</td>
+<td>8083 —&gt; 15672</td>
+<td>8073  —&gt; 5672</td>
+</tr>
+</tbody></table>
+<p>集群中的节点标示默认都是：<code>rabbit@[hostname]</code>，因此以上三个节点的名称分别为：</p>
+<ul>
+<li>rabbit@mq1</li>
+<li>rabbit@mq2</li>
+<li>rabbit@mq3</li>
+</ul>
+<h2 id="2-2-获取cookie"><a href="#2-2-获取cookie" class="headerlink" title="2.2.获取cookie"></a>2.2.获取cookie</h2><p>RabbitMQ底层依赖于Erlang，而Erlang虚拟机就是一个面向分布式的语言，默认就支持集群模式。集群模式中的每个RabbitMQ 节点使用 cookie 来确定它们是否被允许相互通信。</p>
+<p>要使两个节点能够通信，它们必须具有相同的共享秘密，称为<strong>Erlang cookie</strong>。cookie 只是一串最多 255 个字符的字母数字字符。</p>
+<p>每个集群节点必须具有<strong>相同的 cookie</strong>。实例之间也需要它来相互通信。</p>
+<p>我们先在之前启动的mq容器中获取一个cookie值，作为集群的cookie。执行下面的命令：</p>
+<pre><code class="sh">docker exec -it mq cat /var/lib/rabbitmq/.erlang.cookie
+</code></pre>
+<p>可以看到cookie值如下：</p>
+<pre><code class="sh">FXZMCVGLBIXZCDEMMVZQ
+</code></pre>
+<p>接下来，停止并删除当前的mq容器，我们重新搭建集群。</p>
+<pre><code class="sh">docker rm -f mq
+</code></pre>
+<p>清除一下挂载的数据卷</p>
+<pre><code>docker volume prune
+</code></pre>
+<p><img src="E:\项目二\资料\微服务\senior\day03-MQ高级\资料\assets\image-20210717212345165.png" alt="image-20210717212345165"></p>
+<h2 id="2-3-准备集群配置"><a href="#2-3-准备集群配置" class="headerlink" title="2.3.准备集群配置"></a>2.3.准备集群配置</h2><p>在&#x2F;tmp目录新建一个配置文件 rabbitmq.conf：</p>
+<pre><code class="sh">cd /tmp
+# 创建文件
+touch rabbitmq.conf
+</code></pre>
+<p>文件内容如下：</p>
+<pre><code class="nginx">loopback_users.guest = false
+listeners.tcp.default = 5672
+cluster_formation.peer_discovery_backend = rabbit_peer_discovery_classic_config
+cluster_formation.classic_config.nodes.1 = rabbit@mq1
+cluster_formation.classic_config.nodes.2 = rabbit@mq2
+cluster_formation.classic_config.nodes.3 = rabbit@mq3
+</code></pre>
+<p>再创建一个文件，记录cookie</p>
+<pre><code class="sh">cd /tmp
+# 创建cookie文件
+touch .erlang.cookie
+# 写入cookie
+echo &quot;PPTIVREKVCBSLLOLVKCR&quot; &gt; .erlang.cookie
+# 修改cookie文件的权限
+chmod 600 .erlang.cookie
+</code></pre>
+<p>准备三个目录,mq1、mq2、mq3：</p>
+<pre><code class="sh">cd /tmp
+# 创建目录
+mkdir mq1 mq2 mq3
+</code></pre>
+<p>然后拷贝rabbitmq.conf、cookie文件到mq1、mq2、mq3：</p>
+<pre><code class="sh"># 进入/tmp
+cd /tmp
+# 拷贝
+cp rabbitmq.conf mq1
+cp rabbitmq.conf mq2
+cp rabbitmq.conf mq3
+cp .erlang.cookie mq1
+cp .erlang.cookie mq2
+cp .erlang.cookie mq3
+</code></pre>
+<h2 id="2-4-启动集群"><a href="#2-4-启动集群" class="headerlink" title="2.4.启动集群"></a>2.4.启动集群</h2><p>创建一个网络(创建过就不用创建了)：</p>
+<pre><code>docker network create mq-net
+</code></pre>
+<p>运行命令</p>
+<pre><code class="sh">docker run -d --net mq-net \
+-v $&#123;PWD&#125;/mq1/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf \
+-v $&#123;PWD&#125;/.erlang.cookie:/var/lib/rabbitmq/.erlang.cookie \
+-e RABBITMQ_DEFAULT_USER=itcast \
+-e RABBITMQ_DEFAULT_PASS=123321 \
+--name mq1 \
+--hostname mq1 \
+-p 8071:5672 \
+-p 8081:15672 \
+rabbitmq:3.8-management
+</code></pre>
+<pre><code class="sh">docker run -d --net mq-net \
+-v $&#123;PWD&#125;/mq2/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf \
+-v $&#123;PWD&#125;/.erlang.cookie:/var/lib/rabbitmq/.erlang.cookie \
+-e RABBITMQ_DEFAULT_USER=itcast \
+-e RABBITMQ_DEFAULT_PASS=123321 \
+--name mq2 \
+--hostname mq2 \
+-p 8072:5672 \
+-p 8082:15672 \
+rabbitmq:3.8-management
+</code></pre>
+<pre><code class="sh">docker run -d --net mq-net \
+-v $&#123;PWD&#125;/mq3/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf \
+-v $&#123;PWD&#125;/.erlang.cookie:/var/lib/rabbitmq/.erlang.cookie \
+-e RABBITMQ_DEFAULT_USER=itcast \
+-e RABBITMQ_DEFAULT_PASS=123321 \
+--name mq3 \
+--hostname mq3 \
+-p 8073:5672 \
+-p 8083:15672 \
+rabbitmq:3.8-management
+</code></pre>
+<h2 id="2-5-测试"><a href="#2-5-测试" class="headerlink" title="2.5.测试"></a>2.5.测试</h2><p>在mq1这个节点上添加一个队列：</p>
+<p><img src="E:\项目二\资料\微服务\senior\day03-MQ高级\资料\assets\image-20210717222833196.png" alt="image-20210717222833196"></p>
+<p>如图，在mq2和mq3两个控制台也都能看到：</p>
+<p><img src="E:\项目二\资料\微服务\senior\day03-MQ高级\资料\assets\image-20210717223057902.png" alt="image-20210717223057902"></p>
+<h3 id="2-5-1-数据共享测试"><a href="#2-5-1-数据共享测试" class="headerlink" title="2.5.1.数据共享测试"></a>2.5.1.数据共享测试</h3><p>点击这个队列，进入管理页面：</p>
+<p><img src="E:\项目二\资料\微服务\senior\day03-MQ高级\资料\assets\image-20210717223421750.png" alt="image-20210717223421750"></p>
+<p>然后利用控制台发送一条消息到这个队列：</p>
+<p><img src="E:\项目二\资料\微服务\senior\day03-MQ高级\资料\assets\image-20210717223320238.png" alt="image-20210717223320238"></p>
+<p>结果在mq2、mq3上都能看到这条消息：</p>
+<p><img src="E:\项目二\资料\微服务\senior\day03-MQ高级\资料\assets\image-20210717223603628.png" alt="image-20210717223603628"></p>
+<h3 id="2-5-2-可用性测试"><a href="#2-5-2-可用性测试" class="headerlink" title="2.5.2.可用性测试"></a>2.5.2.可用性测试</h3><p>我们让其中一台节点mq1宕机：</p>
+<pre><code class="sh">docker stop mq1
+</code></pre>
+<p>然后登录mq2或mq3的控制台，发现simple.queue也不可用了：</p>
+<p><img src="E:\项目二\资料\微服务\senior\day03-MQ高级\资料\assets\image-20210717223800203.png" alt="image-20210717223800203">说明数据并没有拷贝到mq2和mq3。</p>
+<h1 id="4-镜像模式"><a href="#4-镜像模式" class="headerlink" title="4.镜像模式"></a>4.镜像模式</h1><p>在刚刚的案例中，一旦创建队列的主机宕机，队列就会不可用。不具备高可用能力。如果要解决这个问题，必须使用官方提供的镜像集群方案。</p>
+<p>官方文档地址：<a target="_blank" rel="noopener" href="https://www.rabbitmq.com/ha.html">https://www.rabbitmq.com/ha.html</a></p>
+<h2 id="4-1-镜像模式的特征"><a href="#4-1-镜像模式的特征" class="headerlink" title="4.1.镜像模式的特征"></a>4.1.镜像模式的特征</h2><p>默认情况下，队列只保存在创建该队列的节点上。而镜像模式下，创建队列的节点被称为该队列的<strong>主节点</strong>，队列还会拷贝到集群中的其它节点，也叫做该队列的<strong>镜像</strong>节点。</p>
+<p>但是，不同队列可以在集群中的任意节点上创建，因此不同队列的主节点可以不同。甚至，<strong>一个队列的主节点可能是另一个队列的镜像节点</strong>。</p>
+<p>用户发送给队列的一切请求，例如发送消息、消息回执默认都会在主节点完成，如果是从节点接收到请求，也会路由到主节点去完成。<strong>镜像节点仅仅起到备份数据作用</strong>。</p>
+<p>当主节点接收到消费者的ACK时，所有镜像都会删除节点中的数据。</p>
+<p>总结如下：</p>
+<ul>
+<li>镜像队列结构是一主多从（从就是镜像）</li>
+<li>所有操作都是主节点完成，然后同步给镜像节点</li>
+<li>主宕机后，镜像节点会替代成新的主（如果在主从同步完成前，主就已经宕机，可能出现数据丢失）</li>
+<li>不具备负载均衡功能，因为所有操作都会有主节点完成（但是不同队列，其主节点可以不同，可以利用这个提高吞吐量）</li>
+</ul>
+<h2 id="4-2-镜像模式的配置"><a href="#4-2-镜像模式的配置" class="headerlink" title="4.2.镜像模式的配置"></a>4.2.镜像模式的配置</h2><p>镜像模式的配置有3种模式：</p>
+<table>
+<thead>
+<tr>
+<th align="left">ha-mode</th>
+<th align="left">ha-params</th>
+<th align="left">效果</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">准确模式exactly</td>
+<td align="left">队列的副本量count</td>
+<td align="left">集群中队列副本（主服务器和镜像服务器之和）的数量。count如果为1意味着单个副本：即队列主节点。count值为2表示2个副本：1个队列主和1个队列镜像。换句话说：count &#x3D; 镜像数量 + 1。如果群集中的节点数少于count，则该队列将镜像到所有节点。如果有集群总数大于count+1，并且包含镜像的节点出现故障，则将在另一个节点上创建一个新的镜像。</td>
+</tr>
+<tr>
+<td align="left">all</td>
+<td align="left">(none)</td>
+<td align="left">队列在群集中的所有节点之间进行镜像。队列将镜像到任何新加入的节点。镜像到所有节点将对所有群集节点施加额外的压力，包括网络I &#x2F; O，磁盘I &#x2F; O和磁盘空间使用情况。推荐使用exactly，设置副本数为（N &#x2F; 2 +1）。</td>
+</tr>
+<tr>
+<td align="left">nodes</td>
+<td align="left"><em>node names</em></td>
+<td align="left">指定队列创建到哪些节点，如果指定的节点全部不存在，则会出现异常。如果指定的节点在集群中存在，但是暂时不可用，会创建节点到当前客户端连接到的节点。</td>
+</tr>
+</tbody></table>
+<p>这里我们以rabbitmqctl命令作为案例来讲解配置语法。</p>
+<p>语法示例：</p>
+<h3 id="4-2-1-exactly模式"><a href="#4-2-1-exactly模式" class="headerlink" title="4.2.1.exactly模式"></a>4.2.1.exactly模式</h3><pre><code>rabbitmqctl set_policy ha-two &quot;^two\.&quot; &#39;&#123;&quot;ha-mode&quot;:&quot;exactly&quot;,&quot;ha-params&quot;:2,&quot;ha-sync-mode&quot;:&quot;automatic&quot;&#125;&#39;
+</code></pre>
+<ul>
+<li><code>rabbitmqctl set_policy</code>：固定写法</li>
+<li><code>ha-two</code>：策略名称，自定义</li>
+<li><code>&quot;^two\.&quot;</code>：匹配队列的正则表达式，符合命名规则的队列才生效，这里是任何以<code>two.</code>开头的队列名称</li>
+<li><code>&#39;&#123;&quot;ha-mode&quot;:&quot;exactly&quot;,&quot;ha-params&quot;:2,&quot;ha-sync-mode&quot;:&quot;automatic&quot;&#125;&#39;</code>: 策略内容<ul>
+<li><code>&quot;ha-mode&quot;:&quot;exactly&quot;</code>：策略模式，此处是exactly模式，指定副本数量</li>
+<li><code>&quot;ha-params&quot;:2</code>：策略参数，这里是2，就是副本数量为2，1主1镜像</li>
+<li><code>&quot;ha-sync-mode&quot;:&quot;automatic&quot;</code>：同步策略，默认是manual，即新加入的镜像节点不会同步旧的消息。如果设置为automatic，则新加入的镜像节点会把主节点中所有消息都同步，会带来额外的网络开销</li>
+</ul>
+</li>
+</ul>
+<h3 id="4-2-2-all模式"><a href="#4-2-2-all模式" class="headerlink" title="4.2.2.all模式"></a>4.2.2.all模式</h3><pre><code>rabbitmqctl set_policy ha-all &quot;^all\.&quot; &#39;&#123;&quot;ha-mode&quot;:&quot;all&quot;&#125;&#39;
+</code></pre>
+<ul>
+<li><code>ha-all</code>：策略名称，自定义</li>
+<li><code>&quot;^all\.&quot;</code>：匹配所有以<code>all.</code>开头的队列名</li>
+<li><code>&#39;&#123;&quot;ha-mode&quot;:&quot;all&quot;&#125;&#39;</code>：策略内容<ul>
+<li><code>&quot;ha-mode&quot;:&quot;all&quot;</code>：策略模式，此处是all模式，即所有节点都会称为镜像节点</li>
+</ul>
+</li>
+</ul>
+<h3 id="4-2-3-nodes模式"><a href="#4-2-3-nodes模式" class="headerlink" title="4.2.3.nodes模式"></a>4.2.3.nodes模式</h3><pre><code>rabbitmqctl set_policy ha-nodes &quot;^nodes\.&quot; &#39;&#123;&quot;ha-mode&quot;:&quot;nodes&quot;,&quot;ha-params&quot;:[&quot;rabbit@nodeA&quot;, &quot;rabbit@nodeB&quot;]&#125;&#39;
+</code></pre>
+<ul>
+<li><code>rabbitmqctl set_policy</code>：固定写法</li>
+<li><code>ha-nodes</code>：策略名称，自定义</li>
+<li><code>&quot;^nodes\.&quot;</code>：匹配队列的正则表达式，符合命名规则的队列才生效，这里是任何以<code>nodes.</code>开头的队列名称</li>
+<li><code>&#39;&#123;&quot;ha-mode&quot;:&quot;nodes&quot;,&quot;ha-params&quot;:[&quot;rabbit@nodeA&quot;, &quot;rabbit@nodeB&quot;]&#125;&#39;</code>: 策略内容<ul>
+<li><code>&quot;ha-mode&quot;:&quot;nodes&quot;</code>：策略模式，此处是nodes模式</li>
+<li><code>&quot;ha-params&quot;:[&quot;rabbit@mq1&quot;, &quot;rabbit@mq2&quot;]</code>：策略参数，这里指定副本所在节点名称</li>
+</ul>
+</li>
+</ul>
+<h2 id="4-3-测试"><a href="#4-3-测试" class="headerlink" title="4.3.测试"></a>4.3.测试</h2><p>我们使用exactly模式的镜像，因为集群节点数量为3，因此镜像数量就设置为2.</p>
+<p>运行下面的命令：</p>
+<pre><code class="sh">docker exec -it mq1 rabbitmqctl set_policy ha-two &quot;^two\.&quot; &#39;&#123;&quot;ha-mode&quot;:&quot;exactly&quot;,&quot;ha-params&quot;:2,&quot;ha-sync-mode&quot;:&quot;automatic&quot;&#125;&#39;
+</code></pre>
+<p>下面，我们创建一个新的队列：</p>
+<p><img src="E:\项目二\资料\微服务\senior\day03-MQ高级\资料\assets\image-20210717231751411.png" alt="image-20210717231751411"></p>
+<p>在任意一个mq控制台查看队列：</p>
+<p><img src="E:\项目二\资料\微服务\senior\day03-MQ高级\资料\assets\image-20210717231829505.png" alt="image-20210717231829505"></p>
+<h3 id="4-3-1-测试数据共享"><a href="#4-3-1-测试数据共享" class="headerlink" title="4.3.1.测试数据共享"></a>4.3.1.测试数据共享</h3><p>给two.queue发送一条消息：</p>
+<p><img src="E:\项目二\资料\微服务\senior\day03-MQ高级\资料\assets\image-20210717231958996.png" alt="image-20210717231958996"></p>
+<p>然后在mq1、mq2、mq3的任意控制台查看消息：</p>
+<p><img src="E:\项目二\资料\微服务\senior\day03-MQ高级\资料\assets\image-20210717232108584.png" alt="image-20210717232108584"></p>
+<h3 id="4-3-2-测试高可用"><a href="#4-3-2-测试高可用" class="headerlink" title="4.3.2.测试高可用"></a>4.3.2.测试高可用</h3><p>现在，我们让two.queue的主节点mq1宕机：</p>
+<pre><code class="sh">docker stop mq1
+</code></pre>
+<p>查看集群状态：</p>
+<p><img src="E:\项目二\资料\微服务\senior\day03-MQ高级\资料\assets\image-20210717232257420.png" alt="image-20210717232257420"></p>
+<p>查看队列状态：</p>
+<p><img src="E:\项目二\资料\微服务\senior\day03-MQ高级\资料\assets\image-20210717232322646.png" alt="image-20210717232322646"></p>
+<p>发现依然是健康的！并且其主节点切换到了rabbit@mq2上</p>
+<p>MQ的基本结构：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day04-MQ\讲义\md\assets\mq.png" alt="image-20210717162752376"></p>
+<p>RabbitMQ中的一些角色：</p>
+<ul>
+<li>publisher：生产者</li>
+<li>consumer：消费者</li>
+<li>exchange个：交换机，负责消息路由</li>
+<li>queue：队列，存储消息</li>
+<li>virtualHost：虚拟主机，隔离不同租户的exchange、queue、消息的隔离</li>
+</ul>
+<h2 id="2-2-RabbitMQ消息模型"><a href="#2-2-RabbitMQ消息模型" class="headerlink" title="2.2.RabbitMQ消息模型"></a>2.2.RabbitMQ消息模型</h2><p>RabbitMQ官方提供了5个不同的Demo示例，对应了不同的消息模型：</p>
+<p><strong>是否用到交换机</strong> → 没有的话分成：基本+工作消息队列<br>                            → 有用到的话分：发布订阅</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day04-MQ\讲义\md\assets\image-20210717163332646.png" alt="image-20210717163332646"></p>
+<h2 id="2-3-导入Demo工程"><a href="#2-3-导入Demo工程" class="headerlink" title="2.3.导入Demo工程"></a>2.3.导入Demo工程</h2><p>课前资料提供了一个Demo工程，mq-demo:</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day04-MQ\讲义\md\assets\image-20210717163253264.png" alt="image-20210717163253264"></p>
+<p>导入后可以看到结构如下：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day04-MQ\讲义\md\assets\image-20210717163604330.png" alt="image-20210717163604330"></p>
+<p>包括三部分：</p>
+<ul>
+<li>mq-demo：父工程，管理项目依赖</li>
+<li>publisher：消息的发送者</li>
+<li>consumer：消息的消费者</li>
+</ul>
+<h2 id="2-4-入门案例"><a href="#2-4-入门案例" class="headerlink" title="2.4.入门案例"></a>2.4.入门案例</h2><p>简单队列模式的模型图：</p>
+<p> <img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day04-MQ\讲义\md\assets\image-20210717163434647.png" alt="image-20210717163434647"></p>
+<p>官方的HelloWorld是基于最基础的消息队列模型来实现的，只包括三个角色：</p>
+<ul>
+<li>publisher：消息发布者，将消息发送到队列queue</li>
+<li>queue：消息队列，负责接受并缓存消息</li>
+<li>consumer：订阅队列，处理队列中的消息</li>
+</ul>
+<h3 id="2-4-1-publisher实现"><a href="#2-4-1-publisher实现" class="headerlink" title="2.4.1.publisher实现"></a>2.4.1.publisher实现</h3><p>思路：</p>
+<ul>
+<li>建立连接</li>
+<li>创建Channel</li>
+<li>声明队列</li>
+<li>发送消息</li>
+<li>关闭连接和channel</li>
+</ul>
+<p>代码实现：</p>
+<pre><code class="java">package cn.itcast.mq.helloworld;
+
+import com.rabbitmq.client.Channel;
+import com.rabbitmq.client.Connection;
+import com.rabbitmq.client.ConnectionFactory;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.util.concurrent.TimeoutException;
+
+public class PublisherTest &#123;
+    @Test
+    public void testSendMessage() throws IOException, TimeoutException &#123;
+        Connection connection = null;
+        Channel channel = null;
+        try&#123;
+            // 1.建立连接
+            ConnectionFactory factory = new ConnectionFactory();
+            // 1.1.设置连接参数，分别是：主机名、端口号、vhost、用户名、密码
+            factory.setHost(&quot;192.168.200.129&quot;);
+            factory.setPort(5672);
+            factory.setVirtualHost(&quot;/&quot;);
+            factory.setUsername(&quot;itcast&quot;);
+            factory.setPassword(&quot;123321&quot;);
+            // 1.2.建立连接
+            connection = factory.newConnection();
+            // 2.创建通道Channel
+            channel = connection.createChannel();
+            // 3.创建队列
+            String queueName = &quot;simple.queue&quot;;
+            channel.queueDeclare(queueName, false, false, false, null);
+            // 4.发送消息
+            String message = &quot;hello, rabbitmq!&quot;;
+            channel.basicPublish(&quot;&quot;, queueName, null, message.getBytes());
+            System.out.println(&quot;发送消息成功：【&quot; + message + &quot;】&quot;);
+        &#125;finally &#123;
+            // 5.关闭通道和连接
+            if(connection != null)&#123;
+                connection.close();
+            &#125;
+            if(channel != null)&#123;
+                channel.close();
+            &#125;
+        &#125;
+    &#125;
+&#125;
+</code></pre>
+<h3 id="2-4-2-consumer实现"><a href="#2-4-2-consumer实现" class="headerlink" title="2.4.2.consumer实现"></a>2.4.2.consumer实现</h3><p>代码思路：</p>
+<ul>
+<li>建立连接</li>
+<li>创建Channel</li>
+<li>声明队列</li>
+<li>订阅消息</li>
+</ul>
+<p>代码实现：</p>
+<pre><code class="java">package cn.itcast.mq.helloworld;
+
+import com.rabbitmq.client.*;
+import java.io.IOException;
+import java.util.concurrent.TimeoutException;
+
+public class ConsumerTest &#123;
+
+    public static void main(String[] args) throws IOException, TimeoutException &#123;
+        // 1.建立连接
+        ConnectionFactory factory = new ConnectionFactory();
+        // 1.1.设置连接参数，分别是：主机名、端口号、vhost、用户名、密码
+        factory.setHost(&quot;192.168.200.129&quot;);
+        factory.setPort(5672);
+        factory.setVirtualHost(&quot;/&quot;);
+        factory.setUsername(&quot;itcast&quot;);
+        factory.setPassword(&quot;123321&quot;);
+        // 1.2.建立连接
+        Connection connection = factory.newConnection();
+        // 2.创建通道Channel
+        Channel channel = connection.createChannel();
+        // 3.创建队列
+        String queueName = &quot;simple.queue&quot;;
+        channel.queueDeclare(queueName, false, false, false, null);
+        // 4.订阅消息
+        channel.basicConsume(queueName, true, new DefaultConsumer(channel)&#123;
+            @Override
+            public void handleDelivery(String consumerTag, Envelope envelope,
+                                       AMQP.BasicProperties properties, byte[] body) throws IOException &#123;
+                // 5.处理消息
+                String message = new String(body);
+                System.out.println(&quot;接收到消息：【&quot; + message + &quot;】&quot;);
+            &#125;
+        &#125;);
+        System.out.println(&quot;等待接收消息。。。。&quot;);
+    &#125;
+&#125;
+</code></pre>
+<h2 id="2-5-总结"><a href="#2-5-总结" class="headerlink" title="2.5.总结"></a>2.5.总结</h2><p>基本消息队列的消息发送流程：</p>
+<ol>
+<li><p>建立connection</p>
+</li>
+<li><p>创建channel</p>
+</li>
+<li><p>利用channel声明队列</p>
+</li>
+<li><p>利用channel向队列发送消息</p>
+</li>
+</ol>
+<p>基本消息队列的消息接收流程：</p>
+<ol>
+<li><p>建立connection</p>
+</li>
+<li><p>创建channel</p>
+</li>
+<li><p>利用channel声明队列</p>
+</li>
+<li><p>定义consumer的消费行为handleDelivery()</p>
+</li>
+<li><p>利用channel将消费者与队列绑定</p>
+</li>
+</ol>
+<h1 id="3-SpringAMQP"><a href="#3-SpringAMQP" class="headerlink" title="3.SpringAMQP"></a>3.SpringAMQP</h1><p>SpringAMQP是基于RabbitMQ封装的一套模板，并且还利用SpringBoot对其实现了自动装配，使用起来非常方便。</p>
+<p>SpringAmqp的官方地址：<a target="_blank" rel="noopener" href="https://spring.io/projects/spring-amqp">https://spring.io/projects/spring-amqp</a></p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day04-MQ\讲义\md\assets\image-20210717164024967.png" alt="image-20210717164024967"></p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day04-MQ\讲义\md\assets\image-20210717164038678.png" alt="image-20210717164038678"></p>
+<p>SpringAMQP提供了三个功能：</p>
+<ul>
+<li>自动声明队列、交换机及其绑定关系</li>
+<li>基于注解的监听器模式，异步接收消息</li>
+<li>封装了RabbitTemplate工具，用于发送消息</li>
+</ul>
+<h2 id="3-1-Basic-Queue-简单队列模型"><a href="#3-1-Basic-Queue-简单队列模型" class="headerlink" title="3.1.Basic Queue 简单队列模型"></a>3.1.Basic Queue 简单队列模型</h2><p>在父工程mq-demo中引入依赖</p>
+<pre><code class="xml">&lt;!--AMQP依赖，包含RabbitMQ--&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-boot-starter-amqp&lt;/artifactId&gt;
+&lt;/dependency&gt;
+</code></pre>
+<h3 id="3-1-1-消息发送"><a href="#3-1-1-消息发送" class="headerlink" title="3.1.1.消息发送"></a>3.1.1.消息发送</h3><p>首先配置MQ地址，在publisher服务的application.yml中添加配置：</p>
+<pre><code class="yaml">spring:
+  rabbitmq:
+    host: 192.168.150.101 # 主机名
+    port: 5672 # 端口
+    virtual-host: / # 虚拟主机
+    username: itcast # 用户名
+    password: 123321 # 密码
+</code></pre>
+<p>然后在publisher服务中编写测试类SpringAmqpTest，并利用RabbitTemplate实现消息发送：</p>
+<pre><code class="java">package cn.itcast.mq.spring;
+
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.junit4.SpringRunner;
+
+@RunWith(SpringRunner.class)
+@SpringBootTest
+public class SpringAmqpTest &#123;
+
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
+
+    @Test
+    public void testSendMessage2SimpleQueue() &#123;
+        // 队列名称
+        String queueName = &quot;simple.queue&quot;;
+        // 消息
+        String message = &quot;hello, spring amqp!&quot;;
+        // 发送消息
+        rabbitTemplate.convertAndSend(queueName, message);
+    &#125;
+&#125;
+</code></pre>
+<h3 id="3-1-2-消息接收"><a href="#3-1-2-消息接收" class="headerlink" title="3.1.2.消息接收"></a>3.1.2.消息接收</h3><p>首先配置MQ地址，在consumer服务的application.yml中添加配置：</p>
+<pre><code class="yaml">spring:
+  rabbitmq:
+    host: 192.168.150.101 # 主机名
+    port: 5672 # 端口
+    virtual-host: / # 虚拟主机
+    username: itcast # 用户名
+    password: 123321 # 密码
+</code></pre>
+<p>然后在consumer服务的<code>cn.itcast.mq.listener</code>包中新建一个类SpringRabbitListener，代码如下：</p>
+<pre><code class="java">package cn.itcast.mq.listener;
+
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.stereotype.Component;
+
+@Component
+public class SpringRabbitListener &#123;
+
+    @RabbitListener(queues = &quot;simple.queue&quot;)
+    public void listenSimpleQueueMessage(String msg) throws InterruptedException &#123;
+        System.out.println(&quot;spring 消费者接收到消息：【&quot; + msg + &quot;】&quot;);
+    &#125;
+    
+&#125;
+</code></pre>
+<h3 id="3-1-3-测试"><a href="#3-1-3-测试" class="headerlink" title="3.1.3.测试"></a>3.1.3.测试</h3><p>启动consumer服务，然后在publisher服务中运行测试代码，发送MQ消息</p>
+<h2 id="3-2-WorkQueue"><a href="#3-2-WorkQueue" class="headerlink" title="3.2.WorkQueue"></a>3.2.WorkQueue</h2><p>Work queues，也被称为（Task queues），任务模型。简单来说就是<strong>让多个消费者绑定到一个队列，共同消费队列中的消息</strong>。</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day04-MQ\讲义\md\assets\image-20210717164238910.png" alt="image-20210717164238910"></p>
+<p>当消息处理比较耗时的时候，可能生产消息的速度会远远大于消息的消费速度。长此以往，消息就会堆积越来越多，无法及时处理。</p>
+<p>此时就可以使用work 模型，多个消费者共同处理消息处理，速度就能大大提高了。</p>
+<h3 id="3-2-1-消息接收"><a href="#3-2-1-消息接收" class="headerlink" title="3.2.1.消息接收"></a>3.2.1.消息接收</h3><p>要模拟多个消费者绑定同一个队列，我们在consumer服务的SpringRabbitListener中添加2个新的方法：</p>
+<pre><code class="java">@RabbitListener(queues = &quot;simple.queue&quot;)
+public void listenSimpleQueueMessage(String msg) throws InterruptedException &#123;
+    System.out.println(&quot;消费者1接收到消息：【&quot; + msg + &quot;】&quot; + LocalTime.now());
+    Thread.sleep(20);
+&#125;
+
+@RabbitListener(queues = &quot;simple.queue&quot;)
+public void listenSimpleQueueMessage2(String msg) throws InterruptedException &#123;
+    System.err.println(&quot;消费者2接收到消息：【&quot; + msg + &quot;】&quot; + LocalTime.now());
+    Thread.sleep(100);
+&#125;
+</code></pre>
+<h3 id="3-2-2-消息发送"><a href="#3-2-2-消息发送" class="headerlink" title="3.2.2.消息发送"></a>3.2.2.消息发送</h3><p>这次我们循环发送，模拟大量消息堆积现象。</p>
+<p>在publisher服务中的SpringAmqpTest类中添加一个测试方法：</p>
+<pre><code class="java">/**
+ * workQueue
+ * 向队列中不停发送消息，模拟消息堆积。
+ */
+@Test
+public void testSendMessage2WorkQueue() throws InterruptedException &#123;
+    // 队列名称
+    String queueName = &quot;simple.queue&quot;;
+    // 消息
+    String message = &quot;hello, message_&quot;;
+    for (int i = 1; i &lt;= 50; i++) &#123;
+        // 发送消息
+        rabbitTemplate.convertAndSend(queueName, message + i);
+    &#125;
+&#125;
+</code></pre>
+<h3 id="3-2-3-测试"><a href="#3-2-3-测试" class="headerlink" title="3.2.3.测试"></a>3.2.3.测试</h3><p>一定要先启动ConsumerApplication后，再执行publisher服务中刚刚编写的发送测试方法testWorkQueue，避免某个消费者消费太快，看不出测试效果。可以看到消费者1很快完成了自己的25条消息。消费者2却在缓慢的处理自己的25条消息。也就是说消息是平均分配给每个消费者，并没有考虑到消费者的处理能力。这样显然是有问题的。</p>
+<h3 id="3-2-4-能者多劳"><a href="#3-2-4-能者多劳" class="headerlink" title="3.2.4.能者多劳"></a>3.2.4.能者多劳</h3><p>在spring中有一个简单的配置，可以解决这个问题。我们修改consumer服务的application.yml文件，添加配置：</p>
+<pre><code class="yaml">spring:
+  rabbitmq:
+    listener:
+      simple:
+        prefetch: 1 # 每次只能获取一条消息，处理完成才能获取下一个消息
+</code></pre>
+<h3 id="3-2-5-总结"><a href="#3-2-5-总结" class="headerlink" title="3.2.5.总结"></a>3.2.5.总结</h3><p>Work模型的使用：</p>
+<ul>
+<li>多个消费者绑定到一个队列，同一条消息只会被一个消费者处理</li>
+<li>通过设置prefetch来控制消费者预取的消息数量</li>
+</ul>
+<h2 id="3-3-发布-x2F-订阅"><a href="#3-3-发布-x2F-订阅" class="headerlink" title="3.3.发布&#x2F;订阅"></a>3.3.发布&#x2F;订阅</h2><p>发布订阅的模型如图：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day04-MQ\讲义\md\assets\image-20210717165309625.png" alt="image-20210717165309625"></p>
+<p>可以看到，在订阅模型中，多了一个exchange角色，而且过程略有变化：</p>
+<ul>
+<li>Publisher：生产者，也就是要发送消息的程序，但是不再发送到队列中，而是发给X（交换机）</li>
+<li>Exchange：交换机，图中的X。一方面，接收生产者发送的消息。另一方面，知道如何处理消息，例如递交给某个特别队列、递交给所有队列、或是将消息丢弃。到底如何操作，取决于Exchange的类型。Exchange有以下3种类型：<ul>
+<li>Fanout：广播，将消息交给所有绑定到交换机的队列</li>
+<li>Direct：定向，把消息交给符合指定routing key 的队列</li>
+<li>Topic：通配符，把消息交给符合routing pattern（路由模式） 的队列</li>
+</ul>
+</li>
+<li>Consumer：消费者，与以前一样，订阅队列，没有变化</li>
+<li>Queue：消息队列也与以前一样，接收消息、缓存消息。</li>
+</ul>
+<p><strong>Exchange（交换机）只负责转发消息，不具备存储消息的能力</strong>，因此如果没有任何队列与Exchange绑定，或者没有符合路由规则的队列，那么消息会丢失！</p>
+<h2 id="3-4-Fanout"><a href="#3-4-Fanout" class="headerlink" title="3.4.Fanout"></a>3.4.Fanout</h2><p>Fanout，英文翻译是扇出，我觉得在MQ中叫广播更合适。</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day04-MQ\讲义\md\assets\image-20210717165438225.png" alt="image-20210717165438225"></p>
+<p>在广播模式下，消息发送流程是这样的：</p>
+<ul>
+<li>1）  可以有多个队列</li>
+<li>2）  每个队列都要绑定到Exchange（交换机）</li>
+<li>3）  生产者发送的消息，只能发送到交换机，交换机来决定要发给哪个队列，生产者无法决定</li>
+<li>4）  交换机把消息发送给绑定过的所有队列</li>
+<li>5）  订阅队列的消费者都能拿到消息</li>
+</ul>
+<p>我们的计划是这样的：</p>
+<ul>
+<li>创建一个交换机 itcast.fanout，类型是Fanout</li>
+<li>创建两个队列fanout.queue1和fanout.queue2，绑定到交换机itcast.fanout</li>
+</ul>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day04-MQ\讲义\md\assets\image-20210717165509466.png" alt="image-20210717165509466"></p>
+<h3 id="3-4-1-声明队列和交换机"><a href="#3-4-1-声明队列和交换机" class="headerlink" title="3.4.1.声明队列和交换机"></a>3.4.1.声明队列和交换机</h3><p>在consumer中创建一个类，声明队列和交换机：</p>
+<pre><code class="java">package cn.itcast.mq.config;
+
+import org.springframework.amqp.core.Binding;
+import org.springframework.amqp.core.BindingBuilder;
+import org.springframework.amqp.core.FanoutExchange;
+import org.springframework.amqp.core.Queue;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class FanoutConfig &#123;
+    /**
+     * 声明交换机
+     * @return Fanout类型交换机
+     */
+    @Bean
+    public FanoutExchange fanoutExchange()&#123;
+        return new FanoutExchange(&quot;itcast.fanout&quot;);
+    &#125;
+
+    /**
+     * 第1个队列
+     */
+    @Bean
+    public Queue fanoutQueue1()&#123;
+        return new Queue(&quot;fanout.queue1&quot;);
+    &#125;
+
+    /**
+     * 绑定队列和交换机
+     */
+    @Bean
+    public Binding bindingQueue1(Queue fanoutQueue1, FanoutExchange fanoutExchange)&#123;
+        return BindingBuilder.bind(fanoutQueue1).to(fanoutExchange);
+    &#125;
+
+    /**
+     * 第2个队列
+     */
+    @Bean
+    public Queue fanoutQueue2()&#123;
+        return new Queue(&quot;fanout.queue2&quot;);
+    &#125;
+
+    /**
+     * 绑定队列和交换机
+     */
+    @Bean
+    public Binding bindingQueue2(Queue fanoutQueue2, FanoutExchange fanoutExchange)&#123;
+        return BindingBuilder.bind(fanoutQueue2).to(fanoutExchange);
+    &#125;
+&#125;
+</code></pre>
+<h3 id="3-4-2-消息接收"><a href="#3-4-2-消息接收" class="headerlink" title="3.4.2.消息接收"></a>3.4.2.消息接收</h3><p>在consumer服务的SpringRabbitListener中添加两个方法，作为消费者：</p>
+<pre><code class="java">@RabbitListener(queues = &quot;fanout.queue1&quot;)
+public void listenFanoutQueue1(String msg) &#123;
+    System.out.println(&quot;消费者1接收到Fanout消息：【&quot; + msg + &quot;】&quot;);
+&#125;
+
+@RabbitListener(queues = &quot;fanout.queue2&quot;)
+public void listenFanoutQueue2(String msg) &#123;
+    System.out.println(&quot;消费者2接收到Fanout消息：【&quot; + msg + &quot;】&quot;);
+&#125;
+</code></pre>
+<h3 id="3-4-3-消息发送"><a href="#3-4-3-消息发送" class="headerlink" title="3.4.3.消息发送"></a>3.4.3.消息发送</h3><p>在publisher服务的SpringAmqpTest类中添加测试方法：</p>
+<pre><code class="java">@Test
+public void testSendFanoutExchange() &#123;
+    // 队列名称
+    String exchangeName = &quot;itcast.fanout&quot;;
+    // 消息
+    String message = &quot;hello, everyone!&quot;;
+    rabbitTemplate.convertAndSend(exchangeName, &quot;&quot;, message);
+&#125;
+</code></pre>
+<h3 id="3-4-4-总结-1"><a href="#3-4-4-总结-1" class="headerlink" title="3.4.4.总结"></a>3.4.4.总结</h3><p>交换机的作用是什么？</p>
+<ul>
+<li>接收publisher发送的消息</li>
+<li>将消息按照规则路由到与之绑定的队列</li>
+<li>不能缓存消息，路由失败，消息丢失</li>
+<li>FanoutExchange的会将消息路由到每个绑定的队列</li>
+</ul>
+<p>声明队列、交换机、绑定关系的Bean是什么？</p>
+<ul>
+<li>Queue</li>
+<li>FanoutExchange</li>
+<li>Binding</li>
+</ul>
+<h2 id="3-5-Direct"><a href="#3-5-Direct" class="headerlink" title="3.5.Direct"></a>3.5.Direct</h2><p>在Fanout模式中，一条消息，会被所有订阅的队列都消费。但是，在某些场景下，我们希望不同的消息被不同的队列消费。这时就要用到Direct类型的Exchange。</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day04-MQ\讲义\md\assets\image-20210717170041447.png" alt="image-20210717170041447"></p>
+<p> 在Direct模型下：</p>
+<ul>
+<li>队列与交换机的绑定，不能是任意绑定了，而是要指定一个<code>RoutingKey</code>（路由key）</li>
+<li>消息的发送方在 向 Exchange发送消息时，也必须指定消息的 <code>RoutingKey</code>。</li>
+<li>Exchange不再把消息交给每一个绑定的队列，而是根据消息的<code>Routing Key</code>进行判断，只有队列的<code>Routingkey</code>与消息的 <code>Routing key</code>完全一致，才会接收到消息</li>
+</ul>
+<p><strong>案例需求如下</strong>：</p>
+<ol>
+<li><p>利用@RabbitListener声明Exchange、Queue、RoutingKey</p>
+</li>
+<li><p>在consumer服务中，编写两个消费者方法，分别监听direct.queue1和direct.queue2</p>
+</li>
+<li><p>在publisher中编写测试方法，向itcast. direct发送消息</p>
+</li>
+</ol>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day04-MQ\讲义\md\assets\direct.png" alt="image-20210717170223317"></p>
+<h3 id="3-5-1-基于注解声明队列和交换机"><a href="#3-5-1-基于注解声明队列和交换机" class="headerlink" title="3.5.1.基于注解声明队列和交换机"></a>3.5.1.基于注解声明队列和交换机</h3><p>基于@Bean的方式声明队列和交换机比较麻烦，Spring还提供了基于注解方式来声明。</p>
+<p>在consumer的SpringRabbitListener中添加两个消费者，同时基于注解来声明队列和交换机：</p>
+<pre><code class="java">@RabbitListener(bindings = @QueueBinding(
+    value = @Queue(name = &quot;direct.queue1&quot;),
+    exchange = @Exchange(name = &quot;itcast.direct&quot;, type = ExchangeTypes.DIRECT),
+    key = &#123;&quot;red&quot;, &quot;blue&quot;&#125;
+))
+public void listenDirectQueue1(String msg)&#123;
+    System.out.println(&quot;消费者1接收到direct.queue1的消息：【&quot; + msg + &quot;】&quot;);
+&#125;
+
+@RabbitListener(bindings = @QueueBinding(
+    value = @Queue(name = &quot;direct.queue2&quot;),
+    exchange = @Exchange(name = &quot;itcast.direct&quot;, type = ExchangeTypes.DIRECT),
+    key = &#123;&quot;red&quot;, &quot;yellow&quot;&#125;
+))
+public void listenDirectQueue2(String msg)&#123;
+    System.out.println(&quot;消费者2接收到direct.queue2的消息：【&quot; + msg + &quot;】&quot;);
+&#125;
+</code></pre>
+<h3 id="3-5-2-消息发送"><a href="#3-5-2-消息发送" class="headerlink" title="3.5.2.消息发送"></a>3.5.2.消息发送</h3><p>在publisher服务的SpringAmqpTest类中添加测试方法：</p>
+<pre><code class="java">@Test
+public void testSendDirectExchange() &#123;
+    // 交换机名称
+    String exchangeName = &quot;itcast.direct&quot;;
+    // 消息
+    String message = &quot;红色警报！日本乱排核废水，导致海洋生物变异，惊现哥斯拉！&quot;;
+    // 发送消息
+    rabbitTemplate.convertAndSend(exchangeName, &quot;red&quot;, message);
+&#125;
+</code></pre>
+<h3 id="3-5-3-总结"><a href="#3-5-3-总结" class="headerlink" title="3.5.3.总结"></a>3.5.3.总结</h3><p>描述下Direct交换机与Fanout交换机的差异？</p>
+<ul>
+<li>Fanout交换机将消息路由给每一个与之绑定的队列</li>
+<li>Direct交换机根据RoutingKey判断路由给哪个队列</li>
+<li>如果多个队列具有相同的RoutingKey，则与Fanout功能类似</li>
+</ul>
+<h2 id="3-6-Topic"><a href="#3-6-Topic" class="headerlink" title="3.6.Topic"></a>3.6.Topic</h2><h3 id="3-6-1-说明"><a href="#3-6-1-说明" class="headerlink" title="3.6.1.说明"></a>3.6.1.说明</h3><p><code>Topic</code>类型的<code>Exchange</code>与<code>Direct</code>相比，都是可以根据<code>RoutingKey</code>把消息路由到不同的队列。只不过<code>Topic</code>类型<code>Exchange</code>可以让队列在绑定<code>Routing key</code> 的时候使用通配符！</p>
+<p><code>Routingkey</code> 一般都是有一个或多个单词组成，多个单词之间以”.”分割，例如： <code>item.insert</code></p>
+<p> 通配符规则：</p>
+<p><code>#</code>：匹配一个或多个词</p>
+<p><code>*</code>：匹配不多不少恰好1个词</p>
+<p>举例：</p>
+<p><code>item.#</code>：能够匹配<code>item.spu.insert</code> 或者 <code>item.spu</code></p>
+<p><code>item.*</code>：只能匹配<code>item.spu</code></p>
+<p>图示：</p>
+<p> <img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day04-MQ\讲义\md\assets\topic.png" alt="image-20210717170705380"></p>
+<p>解释：</p>
+<ul>
+<li>Queue1：绑定的是<code>china.#</code> ，因此凡是以 <code>china.</code>开头的<code>routing key</code> 都会被匹配到。包括china.news和china.weather</li>
+<li>Queue2：绑定的是<code>#.news</code> ，因此凡是以 <code>.news</code>结尾的 <code>routing key</code> 都会被匹配。包括china.news和japan.news</li>
+</ul>
+<p>案例需求：</p>
+<p>实现思路如下：</p>
+<ol>
+<li><p>并利用@RabbitListener声明Exchange、Queue、RoutingKey</p>
+</li>
+<li><p>在consumer服务中，编写两个消费者方法，分别监听topic.queue1和topic.queue2</p>
+</li>
+<li><p>在publisher中编写测试方法，向itcast. topic发送消息</p>
+</li>
+</ol>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\basic\day04-MQ\讲义\md\assets\image-20210717170829229.png" alt="image-20210717170829229"></p>
+<h3 id="3-6-2-消息接收"><a href="#3-6-2-消息接收" class="headerlink" title="3.6.2.消息接收"></a>3.6.2.消息接收</h3><p>在consumer服务的SpringRabbitListener中添加方法：</p>
+<pre><code class="java">@RabbitListener(bindings = @QueueBinding(
+    value = @Queue(name = &quot;topic.queue1&quot;),
+    exchange = @Exchange(name = &quot;itcast.topic&quot;, type = ExchangeTypes.TOPIC),
+    key = &quot;china.#&quot;
+))
+public void listenTopicQueue1(String msg)&#123;
+    System.out.println(&quot;消费者1接收到topic.queue1的消息：【&quot; + msg + &quot;】&quot;);
+&#125;
+
+@RabbitListener(bindings = @QueueBinding(
+    value = @Queue(name = &quot;topic.queue2&quot;),
+    exchange = @Exchange(name = &quot;itcast.topic&quot;, type = ExchangeTypes.TOPIC),
+    key = &quot;#.news&quot;
+))
+public void listenTopicQueue2(String msg)&#123;
+    System.out.println(&quot;消费者2接收到topic.queue2的消息：【&quot; + msg + &quot;】&quot;);
+&#125;
+</code></pre>
+<h3 id="3-6-3-消息发送"><a href="#3-6-3-消息发送" class="headerlink" title="3.6.3.消息发送"></a>3.6.3.消息发送</h3><p>在publisher服务的SpringAmqpTest类中添加测试方法：</p>
+<pre><code class="java">/**
+* topicExchange
+*/
+@Test
+public void testSendTopicExchange() &#123;
+    // 交换机名称
+    String exchangeName = &quot;itcast.topic&quot;;
+    // 消息
+    String message = &quot;喜报！孙悟空大战哥斯拉，胜!&quot;;
+    // 发送消息
+    rabbitTemplate.convertAndSend(exchangeName, &quot;china.news&quot;, message);
+&#125;
+</code></pre>
+<h3 id="3-6-4-总结"><a href="#3-6-4-总结" class="headerlink" title="3.6.4.总结"></a>3.6.4.总结</h3><p>描述下Direct交换机与Topic交换机的差异？</p>
+<ul>
+<li>Topic交换机与队列绑定时的bindingKey可以指定通配符</li>
+<li><code>#</code>：代表0个或多个词</li>
+<li><code>*</code>：代表1个词</li>
+</ul>
 
             
         </div>
@@ -439,7 +2666,7 @@ ribbon:
         
         <span class="tag">
             
-            <a href="/tags/HM" style=color:#879cff>
+            <a href="/tags/HM" style=color:#00bcd4>
                 HM
             </a>
         </span>
@@ -1127,7 +3354,7 @@ POST /heima/_update/1
         
         <span class="tag">
             
-            <a href="/tags/后端" style=color:#ffa2c4>
+            <a href="/tags/后端" style=color:#ff7d73>
                 后端
             </a>
         </span>
@@ -4392,7 +6619,7 @@ public class LoginDto &#123;
         
         <span class="tag">
             
-            <a href="/tags/HM" style=color:#00bcd4>
+            <a href="/tags/HM" style=color:#1bccbc>
                 HM
             </a>
         </span>
@@ -4728,7 +6955,7 @@ target/
         
         <span class="tag">
             
-            <a href="/tags/HM" style=color:#879cff>
+            <a href="/tags/HM" style=color:#1bccbc>
                 HM
             </a>
         </span>
@@ -5679,7 +7906,7 @@ kill -9 xxxxx
         
         <span class="tag">
             
-            <a href="/tags/HM" style=color:#ff7d73>
+            <a href="/tags/HM" style=color:#00bcd4>
                 HM
             </a>
         </span>
@@ -7513,7 +9740,7 @@ public class ReportServiceImpl extends ServiceImpl&lt;ReportMapper, Emp&gt; impl
         
         <span class="tag">
             
-            <a href="/tags/后端" style=color:#879cff>
+            <a href="/tags/后端" style=color:#ffa2c4>
                 后端
             </a>
         </span>
@@ -8152,7 +10379,7 @@ public class TestStringToIntMap &#123;
         
         <span class="tag">
             
-            <a href="/tags/后端" style=color:#879cff>
+            <a href="/tags/后端" style=color:#ffa2c4>
                 后端
             </a>
         </span>
@@ -8313,7 +10540,7 @@ public class TestStringToIntMap &#123;
         
         <span class="tag">
             
-            <a href="/tags/攻略" style=color:#ff7d73>
+            <a href="/tags/攻略" style=color:#879cff>
                 攻略
             </a>
         </span>
@@ -16855,7 +19082,7 @@ function getRegionInfo(row) &#123;
         
         <span class="tag">
             
-            <a href="/tags/后端" style=color:#1bccbc>
+            <a href="/tags/后端" style=color:#ff7d73>
                 后端
             </a>
         </span>

@@ -244,13 +244,14 @@ save 60 10000
 <blockquote>
 <p>在LInux中主进程并无法直接读取物理内存，它只能通过虚拟内存去读。因此有<strong>页表</strong>(记录虚拟地址与物理地址的映射关系)去执行操作 同时 主进程也会fork(复制页表) 成为一个新的子进程(携带页表) → 写新RDB文件替换旧的RDB文件 → 磁盘</p>
 </blockquote>
-<p>fork采用的是copy-on-write技术：</p>
+<p>fork采用的是<code>copy-on-write</code>技术：</p>
 <ul>
 <li>当主进程执行<strong>读操作</strong>时，访问共享内存</li>
 <li>当主进程执行<strong>写操作</strong>时，则会拷贝一份数据，执行写操作</li>
 </ul>
+<p>优点：二进制数据重启后 Redis无需过多解析 直接恢复</p>
 <p>&#x3D;&#x3D;<strong>AOF</strong>&#x3D;&#x3D;</p>
-<p>AOF全称为Append Only File(追加文件)。Redis处理的每个写命令都会记录在AOF，可以看作是命令日志文件<br><u>AOF默认是关闭的，需要修改redis.conf配置文件来开启AOF</u>：</p>
+<p>AOF全称为Append Only File(追加文件)<del>底层硬盘顺序读写</del>。Redis处理的每个写命令都会记录在AOF，可以看作是命令日志文件<br><u>AOF默认是关闭的，需要修改redis.conf配置文件来开启AOF</u>：</p>
 <pre><code class="mysql"># 是否开启AOF功能，默认是no
 appendonly yes
 # AOF文件的名称
@@ -299,7 +300,7 @@ auto-aof-rewrite-percentage 100
 # AOF文件体积最小多大以上才触发重写
 auto-aof-rewrite-min-size 64mb
 </code></pre>
-<p><strong>RDB与AOF对比</strong></p>
+<p><strong>★★★★★★★★ RDB与AOF对比 ★★★★★★★★</strong></p>
 <p>RDB和AOF各有优缺点，如果对数据安全性要求较高，在实际开发中往往会结合两者来使用<br>RDB是二进制文件，在保存时体积较小恢复较快，但也有可能丢失数据，我们通常在项目中使用AOF来恢复数据，虽然慢但丢失数据风险小，在AOF文件中可以设置刷盘策略(每秒批量写入一次命令)</p>
 <table>
 <thead>
@@ -474,9 +475,9 @@ public void add2()&#123;
 &#125;
 </code></pre>
 <p>&#x3D;&#x3D;<strong>redisson实现分布式锁 - 主从一致性</strong>&#x3D;&#x3D;</p>
-<p>Redis Master主节点：主要负责<strong>写操作</strong>(增删改)<br>Redis Slave从节点：主要负责<strong>读操作</strong></p>
+<p>Redis Master主节点：主要负责<strong>写操作</strong>(增删改) <del>只能写</del><br>Redis Slave从节点：主要负责<strong>读操作</strong><del>只能读</del></p>
 <blockquote>
-<p>当RedisMaster主节点突然宕机后 Java应用会去格外获取锁 这时两个线程就同时持有一把锁 容易出现脏数据<br>怎么解决呢？↓</p>
+<p>当RedisMaster主节点突然宕机后 Java应用会去格外获取锁 这时两个线程就同时持有一把锁 容易出现脏数据<br>怎么解决呢？</p>
 </blockquote>
 <ul>
 <li><strong>RedLock(红锁)<strong>：不能只在一个redis实例上创建锁，应该是在多个redis实例上创建锁</strong>(n&#x2F;2+1)<strong>，避免在一个redis实例【实现复杂、性能差、运维繁琐】怎么解决？→ <strong>CP思想</strong>：</strong>zookeeper</strong></li>
@@ -492,7 +493,16 @@ public void add2()&#123;
 <li><span style="color:blue"><u>主从<strong>全量同步</strong></u>：</span></li>
 </ul>
 <p>slave从节点执行replicaof命令建立链接 → 请求master主节点数据同步(<u>replid+offset</u>) → master判断是否是第一次同步(判断replid是否一致) → 是第一次, 返回master的数据版本信息(<u>replid+offset</u>)  → slave保存版本信息 → master执行bgsave, 生成RDB → 发送RDB文件给slave → slave清空本地数据加载RDB数据 → 此时master记录RDB期间所有命令<code>repl_balklog</code> → 发送repl_backlog中的命令 → slave执行接收到的命令</p>
-<p><strong>Replication ld</strong>: 简称replid，是数据集的标记，id一致则说明是同一数据集。每一个master都有唯一的replid,slave则会继承master节点的replid<br><strong>offset</strong>: 偏移量，随着记录在repl baklog中的数据增多而逐渐增大。save完成同步时也会记录当前同步的ofset，如果slave的offset小于master的offset，说明slave数据落后于master，需要更新。</p>
+<p><strong>Replication ld</strong>: 简称<u>replid</u>，是数据集的标记，id一致则说明是同一数据集。每一个master都有唯一的replid,slave则会继承master节点的replid<br><strong>offset</strong>: 偏移量，随着记录在repl baklog中的数据增多而逐渐增大。save完成同步时也会记录当前同步的ofset，如果slave的offset小于master的offset，说明slave数据落后于master，需要更新。</p>
+<blockquote>
+<p>简述全量同步的流程？</p>
+<p>• slave节点请求增量同步</p>
+<p>• master节点判断replid，发现不一致，拒绝增量同步</p>
+<p>• master将完整内存数据生成RDB，发送RDB到slave</p>
+<p>• slave清空本地数据，加载master的RDB</p>
+<p>• master将RDB期间的命令记录在repl_baklog，并持续将log中的命令发送给slave</p>
+<p>• slave执行接收到的命令，保持与master之间的同步</p>
+</blockquote>
 <p><span style = "color:red"><strong>能说一下，主从同步数据的流程吗？</strong></span></p>
 <p><span style="color:pink"><strong>全量同步</strong></span></p>
 <blockquote>
@@ -507,6 +517,18 @@ public void add2()&#123;
 <p>1.从节点请求主节点同步数据，主节点判断不是第一次请求，不是第一次就获取从节点的offset值<br>2.主节点从命令日志中获取offset值后的数据，发送给节点进行数据同步</p>
 </blockquote>
 </li>
+</ul>
+<blockquote>
+<p>简述全量同步和增量同步区别？</p>
+<p>•全量同步：master将完整内存数据生成RDB，发送RDB到slave。后续命令则记录在repl_baklog，逐个发送给slave。</p>
+<p>•增量同步：slave提交自己的offset到master，master获取repl_baklog中从offset之后的命令给slave</p>
+<p>什么时候执行全量同步？</p>
+<p>•slave节点第一次连接master节点时</p>
+<p>•slave节点断开时间太久，repl_baklog中的offset已经被覆盖时</p>
+<p>什么时候执行增量同步？</p>
+<p>•slave节点断开又恢复，并且在repl_baklog中能找到offset时</p>
+</blockquote>
+<ul>
 <li><p>&#x3D;&#x3D;<strong>哨兵模式</strong>&#x3D;&#x3D;<br>Redis提供了<strong>哨兵</strong>(Sentinel)机制来实现主从集群的自动故障恢复</p>
 <ul>
 <li><strong>监控</strong>：Sentinel会不断检查您的master和slave是否按预期工作</li>
@@ -3671,7 +3693,263 @@ public static void main(String[] args)&#123;
 <li>解析类的二进制数据流为方法区内的数据结构(Java类模型)</li>
 <li>创建<code>java.lang.Class</code>类的实例，表示该类型。作为方法区这个类的各种数据的访问入口</li>
 </ul>
-<p><img src="https://raw.githubusercontent.com/P-luminary/images/e2fd299592727bbdf7060af4a3ad0dee94bda04d/%E7%B1%BB%E8%A3%85%E8%BD%BD%E7%9A%84%E6%89%A7%E8%A1%8C%E8%BF%87%E7%A8%8B.png"></p>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/6e58e968ea6bb8bb002556d37d5cc31b73f820e3/%E7%B1%BB%E8%A3%85%E8%BD%BD%E7%9A%84%E6%89%A7%E8%A1%8C%E8%BF%87%E7%A8%8B1.png"></p>
+<p><span style = "color:red"><strong>对象什么时候可以被垃圾器回收</strong></span></p>
+<p>如果一个或多个对象没有任何的引用指向它了，那么这个对象现在就是垃圾，如果定位了垃圾，则有可能会被垃圾回收器回收</p>
+<h6 id="怎么确定什么是垃圾？"><a href="#怎么确定什么是垃圾？" class="headerlink" title="怎么确定什么是垃圾？"></a>怎么确定什么是垃圾？</h6><ul>
+<li><p><strong>引用计数法</strong></p>
+<p>一个对象被引用了一次，在当前的对象头上递增一次引用次数，如果这个对象的引用次数为0，代表这个对象可回收</p>
+</li>
+<li><p><strong>可达性分析算法</strong></p>
+<p>采用的都是通过可达性分析算法来确定哪些内容是垃圾</p>
+</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/e29795c3537bdedf4f596d20c78cda8b7f8abc8c/%E5%AF%B9%E8%B1%A1%E4%BB%80%E4%B9%88%E6%97%B6%E5%80%99%E5%8F%AF%E4%BB%A5%E8%A2%AB%E5%9E%83%E5%9C%BE%E5%99%A8%E5%9B%9E%E6%94%B6.png"></p>
+<p><span style = "color:red"><strong>JVM垃圾回收算法有哪些？</strong></span></p>
+<ul>
+<li><p><strong>标记清除算法</strong></p>
+<p>是将垃圾回收分为2个阶段，分别为<strong>标记</strong>和<strong>清除</strong></p>
+<ul>
+<li>根据可达性分析算法得出的垃圾进行标记</li>
+<li>对这些标记为可回收的内容进行垃圾回收</li>
+</ul>
+</li>
+<li><p><strong>复制算法</strong></p>
+<p>将原有的内存空间一分为二，每次只用其中的一块，正在使用的对象复制到另一个内存空间中，然后将该内存空间清空，交换两个内存的角色，完成垃圾的回收；无碎片，内存使用率低</p>
+</li>
+<li><p><strong>标记清理算法</strong><del>一般用于老年代</del></p>
+<p>标记清除算法一样，将存活对象都向内存另一端移动，然后清理边界以外的垃圾，无碎片，对象需要移动，效率低</p>
+</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/da45a9b399c0614bb286b0dfef59d0d737ee7b38/JVM%E5%9E%83%E5%9C%BE%E5%9B%9E%E6%94%B6%E7%AE%97%E6%B3%95.png"></p>
+<p><span style = "color:red"><strong>JVM的分代回收是什么？</strong></span></p>
+<h6 id="分代收集算法"><a href="#分代收集算法" class="headerlink" title="分代收集算法"></a>分代收集算法</h6><p>在java8时，堆被分为了两份：<strong>新生代和老年代</strong>[1:2]<br>对于新生代，内部又分为了三个区域，Eden区，幸存者区survivor(分成from和to)【8:1:1】</p>
+<h6 id="MinorGC、MixedGC、FullGC的区别是什么"><a href="#MinorGC、MixedGC、FullGC的区别是什么" class="headerlink" title="MinorGC、MixedGC、FullGC的区别是什么"></a>MinorGC、MixedGC、FullGC的区别是什么</h6><ul>
+<li>MinorGC<del>(youngGC)</del>发生在新生代的垃圾回收，暂停时间短(STW)</li>
+<li>MixedGC：新生代 + 老年代 <strong>部分</strong>区域的垃圾回收，G1收集器特有</li>
+<li>FullGC：新生代 + 老年代 <strong>完整</strong>垃圾回收，暂停时间长(STW)，应尽力避免</li>
+</ul>
+<p><code>STW(Stop-The-World)</code>：<u>暂停所有应用程序线程，等待垃圾回收的完成</u></p>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/3cf5dfdf35165c472440a0b24f3561c6bef9b81a/JVM%E7%9A%84%E5%88%86%E4%BB%A3%E5%9B%9E%E6%94%B6%E6%98%AF%E4%BB%80%E4%B9%88.png"></p>
+<p><span style = "color:red"><strong>JVM有哪些垃圾回收器？</strong></span></p>
+<p>在jvm中，实现了多种垃圾收集器，包括：</p>
+<ul>
+<li><p><strong>串行垃圾收集器</strong></p>
+<p><strong>Serial</strong>和<strong>Serial Old</strong>串行垃圾收集器，是指使用单线程进行垃圾回收，堆内存较小，适合个人电脑</p>
+<ul>
+<li>Serial 作用于新生代，采用复制算法</li>
+<li>Serial Old 作用于老年代，采用标记-整理算法垃圾回收时，只有一个线程在工作，并且java应用中的所有线程都要暂停(STW)，等待垃圾回收的完成</li>
+</ul>
+</li>
+<li><p><strong>并行垃圾收集器</strong></p>
+<p>Parallel New和Parallel Old是一个<strong>并行</strong>垃圾回收器，<strong>JDK8默认使用此垃圾回收器</strong></p>
+<ul>
+<li><p>Parallel New作用于新生代，采用复制算法</p>
+</li>
+<li><p>Parallel Old作用于老年代，采用标记-整理算法</p>
+<p>垃圾回收时，多个线程在工作，并且java应用中的所有线程都要暂停(STW)，等待垃圾回收的完成。</p>
+</li>
+</ul>
+</li>
+<li><p><strong>CMS(并发)垃圾收集器</strong></p>
+<p>CMS全称 Concurrent Mark Sweep，是一款<strong>并发</strong>的、使用<strong>标记-清除</strong>算法的垃圾回收器，该回收器是<strong>针对老年代垃圾回收的</strong>，是一款以获取最短回收停顿时间为目标的收集器，停顿时间短，用户体验就好。其最大特点是在进行垃圾回收时，应用仍然能正常运行</p>
+</li>
+<li><p><strong>G1垃圾收集器</strong></p>
+<p>作用在新生代和老年代</p>
+</li>
+</ul>
+<p><span style = "color:red"><strong>详细聊一下G1垃圾回收器</strong></span></p>
+<ul>
+<li>应用于新生代和老年代，<strong>在JDK9之后默认使用G1</strong></li>
+<li>划分成多个区域，每个区域都可以充当<strong>eden，survivor，old，humongous</strong>，其中<code>humongous</code>专为大对象准备</li>
+<li>采用复制算法</li>
+<li>响应时间与吞吐量兼顾</li>
+<li>分成三个阶段：新生代回收(STW)、并发标记(重新标记STW)、混合收集</li>
+<li>如果并发失败(即回收速度赶不上创建新对象速度)，就会触发<code>Full GC</code></li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/1a968a17f25b1bbd6bdde1c89b08cb064802b868/%E8%AF%A6%E7%BB%86%E8%81%8A%E4%B8%80%E4%B8%8BG1%E5%9E%83%E5%9C%BE%E5%9B%9E%E6%94%B6%E5%99%A8.png"></p>
+<p><span style = "color:red"><strong>强引用、软引用、弱引用、虚引用的区别</strong></span></p>
+<blockquote>
+<p><strong>强引用</strong>：只要所有 GC Roots 能找到，就不会被回收<br><strong>软引用</strong>：需要配合<code>SoftReference</code>使用，当垃圾多次回收，内存依然不够时候会回收软引用对象<br><strong>弱引用</strong>：需要配合<code>WeakReference</code>使用，只要进行了垃圾回收，就会把引用对象回收<br><strong>虚引用</strong>：必须配合引用队列使用，被引用对象回收时，会将虚引用入队由 <code>Reference Handler</code> 线程调用虚引用相关方法释放直接内存</p>
+</blockquote>
+<ul>
+<li><strong>强引用</strong>：只有所有 <code>GCRoots</code> 对象都不通过【强引用】 引用该对象，该对象才能被垃圾回收</li>
+</ul>
+<pre><code class="java">User user = new User();
+</code></pre>
+<p>  <u>GC Root → User对象</u></p>
+<ul>
+<li><strong>软引用</strong>：仅有软引用引用该对象时，在垃圾回收后，<strong>内存仍不足</strong>时会再次触发垃圾回收</li>
+</ul>
+<pre><code class="java">User user = new User();
+SoftReference softReference = new SoftReference(user);
+</code></pre>
+<p>  <u>GC Root → SoftReference对象 →→<del>虚线</del> User对象</u><br>  一开始并不会对User对象进行回收 此时User对象就是软引用 如果内存还是不够 马上又再次进行了垃    圾回收 此时软引用的User就会被回收</p>
+<ul>
+<li><strong>弱引用</strong>：仅有弱引用引用该对象时，在垃圾回收时，无论内存是否充足，都会回收弱引用对象</li>
+</ul>
+<pre><code class="java">User user = new User();
+WeakReference weakReference = new WeakReference(user)
+</code></pre>
+<p>  <u>GC Root → WeakReference对象 →→<del>虚线</del> User对象</u></p>
+<blockquote>
+<p>延申话题：ThreadLocal内存泄露问题</p>
+<pre><code class="java">static class Entry extends WeakReference&lt;ThreadLocal&lt;?&gt;&gt;&#123;
+    Object value;
+    Entry(ThreadLocal&lt;?&gt;k, Object v)&#123;
+        super(k); // k是弱引用
+        value = v; // 强引用，不会被回收
+    &#125;
+&#125;
+</code></pre>
+</blockquote>
+<ul>
+<li><strong>虚引用</strong>：必须配合引用队列使用，被引用对象回收时，会将虚引用入队，由 <code>Reference Handler</code> 线程调用虚引用相关方法释放直接内存</li>
+</ul>
+<pre><code class="java">User user = new User();
+ReferenceQueue referenceQueue = new ReferenceQueue();
+PhantomReference phantomReference = new PhantomReference(user, queue);
+</code></pre>
+<p><span style = "color:red"><strong>JVM调优的参数可以在哪里设置？</strong></span></p>
+<ul>
+<li><p><code>war包</code>部署在<code>tomcat</code>中设置</p>
+<p>修改 <code>TOMCAT_HOME/bin/catalina.sh</code> 文件<br><code>D:\apache-tomcat-8.5.93\bin\catalina.sh</code></p>
+<pre><code class="mysql"># OS specific support.  $var _must_ be set to either true or false.
+JAVA_OPTS=&quot;-Xms512m -Xmx1024m&quot;
+cygwin=false
+darwin=false
+os400=false
+hpux=false
+</code></pre>
+</li>
+<li><p><code>jar包</code>部署在<code>启动参数</code>设置</p>
+<p>通常在linux系统下直接加参数启动SpringBoot项目<del>—VM</del></p>
+<p><code>nohup java -Xms512m -Xmx1024n -jar xxxx.jar --spring.profiles.active=prod &amp;</code></p>
+</li>
+</ul>
+<p><strong>nohup</strong>：用于在系统后台不挂断地运行命令，退出终端不会影响程序的运行<br>**参数<code>&amp;</code>**：让命令在后台执行，终端退出后命令仍然执行</p>
+<p><span style = "color:red"><strong>JVM调优的参数都有哪些？</strong></span></p>
+<p>对于JVM调优，主要就是调整 <code>年轻代、老年代、元空间</code> 的内存大小及使用的垃圾回收器类型</p>
+<ul>
+<li><p><strong>设置堆空间大小</strong></p>
+<p>设置堆的初始大小和最大大小，为了防止垃圾收集器在初始大小、最大大小之间收缩堆而产生额外的时间，通常把最大、初始大小设置为相同的值</p>
+<pre><code class="java">-Xms: 设置堆的初始化大小
+-Xmx: 设置堆的最大大小
+// 不指定单位默认为字节
+-Xms：1024
+-Xms：1024k
+</code></pre>
+<p>堆内存设置多少合适？</p>
+<ul>
+<li>最大大小的默认值是物理内存的1&#x2F;4，初始大小是物理内存的1&#x2F;64</li>
+<li>堆太小，可能会频繁的导致年轻代和老年代的垃圾回收，会产生STW，暂停用户线程</li>
+<li>堆内存大肯定是好的，存在风险，假如发生了fullgc，它会扫描整个堆空间，暂停用户线程的时间长</li>
+</ul>
+</li>
+<li><p><strong>虚拟机栈的设置</strong></p>
+<p>虚拟机栈的设置：<strong>每个线程默认会开启1M的内存</strong>，用于存放栈帧、调用参数、局部变量等，但一般256K就够用。通常减少每个线程的堆栈，可以产生更多的线程，但这实际上还受限于操作系统。</p>
+<p><code>-Xss 对每个线程stack大小的调整，-Xss128k</code></p>
+</li>
+<li><p><strong>年轻代中Eden区和两个Survivor区的大小比例</strong></p>
+<p>设置年轻代中Eden区和两个Survivor区的大小比例。该值如果不设置，则默认比例为8:1:1。通过增大Eden区的大小来减少YGC发生的次数，但有时我们发现，虽然次数减少了，但Eden区满的时候，由于占用的空间较大，导致释放缓慢，此时STW的时间较长，因此需要按照程序情况去调优。</p>
+<p><code>-XXSurvivorRatio=8，表示年轻代中的分配比率：survivor:eden = 2:8</code></p>
+</li>
+<li><p><strong>年前代晋升老年代阈值</strong>【默认值为15，取值范围0-15】</p>
+<p><code>-XX:MaxTenuringThreshold=threshold</code></p>
+</li>
+<li><p><strong>设置垃圾回收收集器</strong></p>
+<p>通过增大吞吐量提高系统性能，可以通过设置并行垃圾回收收集器</p>
+<p><code>-XX:+UseParallelGC</code><br><code>-XX:+UseParallelOldGC</code></p>
+<p><code>-XX:+UserG1GC</code></p>
+</li>
+</ul>
+<p><span style = "color:red"><strong>JVM调优的参数都有哪些？</strong></span></p>
+<ul>
+<li><p><strong>命令工具</strong></p>
+<ul>
+<li><p><strong>jps</strong> 进程状态信息</p>
+</li>
+<li><p><strong>jstack</strong> 查看进程内线程的堆栈信息<del>产生死锁可以查看</del></p>
+</li>
+<li><p><strong>jmap</strong> 查看堆栈信息[生成堆转内存快照,内存使用信息]</p>
+<pre><code class="java">jmap -head pid 显示Java堆的信息
+jmap -dump:format=b,file=heap.hprof pid
+</code></pre>
+<ul>
+<li><p>format&#x3D;b 表示以hprof二进制格式存储Java堆的内存</p>
+</li>
+<li><p>file&#x3D;&lt; filename  &gt; 用于指定快照dump文件的文件名</p>
+<p><code>dump</code>：它是我们都可以通过工个进程或系统在某一给定的时间的快照。比如在进程崩溃时，甚至是任何时候，具将系统或某进程的内存备份出来供调试分析用，dump文件中包含了程序运行的模块信息、线程信息、堆调用信息、异常信息等数据，方便系统技术人品进行错误排查</p>
+</li>
+</ul>
+</li>
+<li><p><strong>jhat</strong> 堆转储快照分析工具</p>
+</li>
+<li><p><strong>jstat</strong> JVM统计监测工具[可以用来显示垃圾回收信息、类加载信息、新生代统计信息等]</p>
+<ul>
+<li>总结垃圾回收统计：<code>jstat -gcutil pid</code></li>
+<li>垃圾回收统计：<code>jstat -gc pid</code></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><p><strong>可视化工具</strong></p>
+<ul>
+<li><strong>jconsole</strong> 用于对jvm的内存，线程，类的监控, 是一个可视化工具<br><code>D:\java\jdk-11.0.20\bin\jconsole.exe</code></li>
+<li><strong>VisualVM</strong> 能够监控线程，内存情况<del>只有jdk1.8有</del><br><code>D:\java\jdk1.8.0_181\bin\jvisualvm.exe</code></li>
+</ul>
+</li>
+</ul>
+<p><span style = "color:red"><strong>Java内存泄露的排查思路？</strong></span></p>
+<blockquote>
+<p>内存泄漏通常是指堆内存，通常是指一些大对象不被回收的情况<br>1、通过jmap或设置jvm参数获取堆内存快照dump<br>2、通过工具，VisualVM去分析dump文件，VisualVM可以加载离线的dump文件<br>3、通过查看堆信息的情况，可以大概定位内存溢出是哪行代码出了问题<br>4、找到对应的代码，通过阅读上下文的情况，进行修复即可</p>
+</blockquote>
+<p>JVM  Stacks <strong>虚拟机栈</strong> → <code>StackOverFlowError</code><br>Heap <strong>堆</strong> → <code>OutOfMemoryError：java heap space</code><br>Method Are&#x2F; MateSpace <strong>方法区&#x2F;元空间</strong> → <code>OutOfMemoryError: Metaspace</code></p>
+<p>模拟堆空间溢出场景：-VM设置参数 → <code>-Xmx10m</code></p>
+<pre><code class="java">List&lt;String&gt; list = new ArrayList&lt;&gt;();
+while(true)&#123;
+    list.add(&quot;北京&quot;);
+&#125;
+
+-------------------------------------------
+// OutOfMemoryError：java heap space
+</code></pre>
+<h6 id="如何排查启动闪退、运行一段时间宕机"><a href="#如何排查启动闪退、运行一段时间宕机" class="headerlink" title="如何排查启动闪退、运行一段时间宕机"></a>如何排查启动闪退、运行一段时间宕机</h6><ul>
+<li><p>获取堆内存快照dump</p>
+<ul>
+<li>使用jmap命令获取运行中程序的dump文件<del>【只有在项目运行时候才可以用】</del></li>
+</ul>
+<pre><code class="java">jmap -head pid 显示Java堆的信息
+jmap -dump:format=b,file=heap.hprof pid 【只有在项目运行时候才可以用】
+</code></pre>
+<ul>
+<li><p><strong>使用vm参数获取dump文件</strong></p>
+<p>有的情况是内存溢出之后程序则会直接中断，而jmap只能打印在运行中的程序，所以建议通过参数的方式生成dump文件</p>
+</li>
+</ul>
+<pre><code class="java">-XX:+HeapDumpOnOutOfMemoryError
+-XX:HeapDumpPath=/home/app/dumps/
+</code></pre>
+</li>
+<li><p>VisualVM区分析dump文件</p>
+</li>
+<li><p>通过查看堆内存的信息，定位内存溢出问题</p>
+</li>
+</ul>
+<p><span style = "color:red"><strong>CPU飙高排查方案与思路？</strong></span></p>
+<blockquote>
+<p>1.使用top命令查看占用cpu的情况<br>2.通过top命令查看后，可以查看是哪一个进程占用cpu较高<br>3.使用ps命令查看进程中的线程信息<br>4.使用jstack命令查看进程中哪些线程出现了问题，最终定位问题</p>
+</blockquote>
+<ul>
+<li><p>使用top命令查看占用cpu的情况<code>哪个进程占用的cpu最高</code></p>
+<p>finalShell中输入 <code>top</code></p>
+</li>
+<li><p>查看进程中的线程信息  <code>ps H -eo pid,tid,%cpu | gerp pid</code></p>
+</li>
+<li><p><strong>jstack</strong> 查看进程内线程的堆栈信息<del>产生死锁可以查看</del></p>
+<p>因为是十六进程所以要十进程转换十六进程<br>直接linux输入 <code>printf &quot;%x\n&quot; Pid</code><br>然后就可以根据十六进制的去找哪个线程cpu占用<br>之后查看文件是<code>cat xxx</code></p>
+</li>
+</ul>
 
     </div>
 

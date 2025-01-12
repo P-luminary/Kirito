@@ -126,7 +126,7 @@
             
             <span class="tag">
                 
-                <a href="/tags/后端" style=color:#00bcd4>
+                <a href="/tags/后端" style=color:#879cff>
                     后端
                 </a>
             </span>
@@ -2190,7 +2190,10 @@ spring:
 <hr>
 <hr>
 <hr>
-<h4 id="线程池的执行流程大致如下"><a href="#线程池的执行流程大致如下" class="headerlink" title="线程池的执行流程大致如下:"></a><strong>线程池的执行流程大致如下</strong>:</h4><p>线程池：ThreadPoolExecutor<br>一开始new的时候没有 是空的。先当一个任务提交给线程池时，线程池首先检查当前运行的线程数是否达到核心线程数。如果没有达到核心线程数，线程池会创建一个新的线程来执行任务。如果已经达到核心线程数，线程池会将任务放入工作队列中等待执行。如果工作队列满了，并且当前运行的线程数小于最大线程数，，线程池会创建新的线程来执行任务。如果工作队列满了，并且当前运行的线程数等于最大线程数，线程池会根据<strong>拒绝策略</strong></p>
+<hr>
+<hr>
+<hr>
+<h4 id="线程池的执行流程大致如下"><a href="#线程池的执行流程大致如下" class="headerlink" title="线程池的执行流程大致如下:"></a><strong>线程池的执行流程大致如下</strong>:</h4><p>线程池：ThreadPoolExecutor<br>一开始new的时候没有 是空的。先当一个任务提交给线程池时，线程池首先检查当前运行的线程数是否达到核心线程数。如果没有达到核心线程数，线程池会创建一个新的线程来执行任务。如果已经达到核心线程数，线程池会将任务放入工作队列中等待执行。如果工作队列满了，并且当前运行的线程数小于最大线程数，线程池会创建新的线程来执行任务。如果工作队列满了，并且当前运行的线程数等于最大线程数，线程池会根据<strong>拒绝策略</strong></p>
 <ul>
 <li><u>丢弃任务抛出异常</u></li>
 <li><u>丢弃任务不抛弃异常</u></li>
@@ -3134,6 +3137,53 @@ public class Address implements Cloneable &#123;
 </ul>
 <p>一段很长的时间内都只被一个线程使用锁 <strong>偏向锁</strong><br>有线程交替或线程加锁的时间是错开的 <strong>轻量级锁</strong><br>有很多线程来抢 <strong>重量级锁</strong></p>
 <p>java语言是高级语言如果想调用底层的操作系统和硬件要通过操作系统的API去操作。以前老的JDK版本 数据是在操作系统找的数据<del>锁</del>，Monitor的标志0 和 1，底层使用的Monitor实现，里面涉及到了用户态和内核态的切换、进程的上下文切换，成本较高，性能比较低 。<br>引入新型锁后，java里是用对象头找个地方存一把锁，这样就不涉及到调用操作系统底层。一开始new了个对象 此时是无锁状态。接下来来人拿锁，长期一个人拿到那个锁 此时是<strong>偏向锁</strong><del>竞争不激烈</del>。后面多线程一起来 <u>交替抢锁</u> 此时是<strong>轻量级锁</strong>。随着并发越来越高 此时在一个线程拿到锁后很多线程来抢锁 线程先尝试自己先获取几次(自旋锁64次未拿到锁就会升级为重量级锁) 这时就涉及到操作系统的底层对象涉及到了用户态<del>权限低</del>和内核态<del>权限高</del>的切换、进程的上下文切换，成本较高，性能比较低。锁不可逆<del>可能新版本可以降级</del></p>
+<h3 id="Dockerfile-常用命令"><a href="#Dockerfile-常用命令" class="headerlink" title="Dockerfile 常用命令"></a>Dockerfile 常用命令</h3><ul>
+<li><code>FROM</code>: 指定基础镜像。</li>
+<li><code>ENV</code>: 设置环境变量。</li>
+<li><code>RUN</code>: 执行命令并创建新的镜像层。</li>
+<li><code>COPY</code>: 将文件从宿主机复制到容器中。</li>
+<li><code>EXPOSE</code>: 声明容器运行时将监听的端口。</li>
+<li><code>ENTRYPOINT</code>: 配置容器启动时运行的命令。</li>
+</ul>
+<h3 id="常用的-Docker-命令"><a href="#常用的-Docker-命令" class="headerlink" title="常用的 Docker 命令"></a>常用的 Docker 命令</h3><ul>
+<li><code>docker run</code>: 创建一个新的容器并运行一个命令。</li>
+<li><code>docker pull</code>: 从仓库中拉取或者更新一个镜像。</li>
+<li><code>docker push</code>：推送镜像到服务</li>
+<li><code>docker build</code>: 从 Dockerfile 构建一个镜像。</li>
+<li><code>docker images</code>: 列出本地镜像。</li>
+<li><code>docker ps</code>: 列出运行中的容器。</li>
+<li><code>docker stop</code>: 停止一个运行中的容器。</li>
+<li><code>docker start</code>: 启动一个停止的容器。</li>
+<li><code>docker rm</code>: 删除一个容器。</li>
+<li><code>docker rmi</code>: 删除一个镜像。</li>
+<li><code>docker exec</code>: 在运行中的容器内执行命令。</li>
+<li><code>docker logs</code>: 获取容器的日志。</li>
+</ul>
+<pre><code class="java">- docker volume create：创建数据卷
+- docker volume ls：查看所有数据卷
+- docker volume inspect：查看数据卷详细信息，包括关联的宿主机目录位置
+- docker volume rm：删除指定数据卷
+</code></pre>
+<h4 id="Docker-Compose-常用命令"><a href="#Docker-Compose-常用命令" class="headerlink" title="Docker Compose 常用命令"></a>Docker Compose 常用命令</h4><ul>
+<li><code>docker-compose up</code>: 启动所有服务的容器。</li>
+<li><code>docker-compose down</code>: 停止并删除容器、网络、卷和镜像。</li>
+<li><code>docker-compose ps</code>: 列出项目中所有的容器。</li>
+<li><code>docker-compose exec</code>: 进入指定的容器。</li>
+<li><code>docker-compose build</code>: 构建或重建服务。</li>
+<li><code>docker-compose logs</code>: 查看服务的日志输出。</li>
+<li><code>docker-compose stop</code>: 停止运行的容器。</li>
+</ul>
+<h3 id="synchronized-和-ReentrantLock-的区别"><a href="#synchronized-和-ReentrantLock-的区别" class="headerlink" title="synchronized 和 ReentrantLock 的区别"></a>synchronized 和 ReentrantLock 的区别</h3><ul>
+<li><code>synchronized</code> 是Java的一个关键字<del>用于方法和代码块中</del>，而 <code>ReentrantLock</code> 是JUC包的一个类。</li>
+<li><code>synchronized</code> 可以自动加锁和解锁，而 <code>ReentrantLock</code> 需要手动加锁和解锁。</li>
+<li><code>synchronized</code> 的锁是非公平的，而 <code>ReentrantLock</code> 默认也是非公平的，但可以设置为公平锁。</li>
+</ul>
+<h3 id="你们公司是怎么部署项目的"><a href="#你们公司是怎么部署项目的" class="headerlink" title="你们公司是怎么部署项目的"></a>你们公司是怎么部署项目的</h3><p>是通过docker + jenkins<br>测试环境我们参与 生产环境组长部署</p>
+<h3 id="varchar-与-char-区别"><a href="#varchar-与-char-区别" class="headerlink" title="varchar 与 char 区别"></a>varchar 与 char 区别</h3><ul>
+<li><code>varchar</code> 是可变长度的字符串，而 <code>char</code> 是固定长度的字符串。</li>
+<li><code>varchar</code> 的性能通常比 <code>char</code> 差，因为需要处理额外的长度信息。</li>
+<li>当数据长度变化很大时，推荐使用 <code>varchar</code>；当数据长度几乎固定时，使用 <code>char</code> 可能更合适。</li>
+</ul>
 
     </div>
 

@@ -3184,6 +3184,483 @@ public class Address implements Cloneable &#123;
 <li><code>varchar</code> 的性能通常比 <code>char</code> 差，因为需要处理额外的长度信息。</li>
 <li>当数据长度变化很大时，推荐使用 <code>varchar</code>；当数据长度几乎固定时，使用 <code>char</code> 可能更合适。</li>
 </ul>
+<h4 id="Redis的持久化有哪几种-它们的区别是什么"><a href="#Redis的持久化有哪几种-它们的区别是什么" class="headerlink" title="Redis的持久化有哪几种? 它们的区别是什么?"></a>Redis的持久化有哪几种? 它们的区别是什么?</h4><p>完整性 大小 数据恢复速度 建议</p>
+<p><strong>Redis持久化</strong>：RDB全称Redis Database Backup file(Redis数据备份文件)，也被叫做Redis数据快照，简单来说就是<u>把内存中的所有数据都记录到磁盘中</u>。当Redis实例故障重启后，从磁盘读取快照文件，数据恢复。</p>
+<pre><code class="mysql">[root@localhost ~]# redis-cli
+127.0.0.1:6379&gt; save          #由Redis主进程来执行RDB，会阻塞所有命令
+ok
+
+127.0.0.1:6379&gt; bgsave        #开启子进程执行RDB，避免主进程受到影响
+Background saving started
+</code></pre>
+<p>Redis内部有触发RDB的机制，可以在redis.conf文件中找到，格式如下：</p>
+<pre><code class="java">// 900秒内，如果至少有1个key被修改，则执行bgsave
+save 900 1
+save 300 10
+save 60 10000
+</code></pre>
+<p>&#x3D;&#x3D;<strong>RDB的执行原理？</strong>&#x3D;&#x3D;<del>数据完整性高用RDB</del></p>
+<p><strong><u>bgsave开始时会fork主进程得到子进程，子进程共享主进程的内存数据，完成fork后读取内存数据并写入RDB文件</u></strong></p>
+<blockquote>
+<p>在LInux中主进程并无法直接读取物理内存，它只能通过虚拟内存去读。因此有<strong>页表</strong>(记录虚拟地址与物理地址的映射关系)去执行操作 同时 主进程也会fork(复制页表) 成为一个新的子进程(携带页表) → 写新RDB文件替换旧的RDB文件 → 磁盘</p>
+</blockquote>
+<p>fork采用的是<code>copy-on-write</code>技术：</p>
+<ul>
+<li>当主进程执行<strong>读操作</strong>时，访问共享内存</li>
+<li>当主进程执行<strong>写操作</strong>时，则会拷贝一份数据，执行写操作</li>
+</ul>
+<p>优点：二进制数据重启后 Redis无需过多解析 直接恢复</p>
+<p>&#x3D;&#x3D;<strong>AOF</strong>&#x3D;&#x3D;<del>对数据不敏感要求不高</del></p>
+<p>AOF全称为Append Only File(追加文件)<del>底层硬盘顺序读写</del>。Redis处理的每个写命令都会记录在AOF，可以看作是命令日志文件<br><u>AOF默认是关闭的，需要修改redis.conf配置文件来开启AOF</u>：</p>
+<pre><code class="mysql"># 是否开启AOF功能，默认是no
+appendonly yes
+# AOF文件的名称
+appendfilename &quot;appendonly.aof&quot;
+</code></pre>
+<p>AOF的命令记录的频率也可以通过redis.conf文件来配</p>
+<pre><code class="mysql"># 表示每执行一次写命令，立即记录到AOF文件
+appendfsync always
+# 写命令执行完毕先放入AOF缓冲区，然后表示每隔一秒将缓冲区数据写到AOF文件，是默认方案
+appendfsync everysec
+# 写命令执行完先放入AOF缓冲区，由操作系统决定何时将缓冲区内容写回磁盘
+appendfsync no
+</code></pre>
+<table>
+<thead>
+<tr>
+<th align="center">配置项</th>
+<th align="center">刷盘时机</th>
+<th align="center">优点</th>
+<th align="center">缺点</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center">Always</td>
+<td align="center">同步刷盘</td>
+<td align="center">可靠性高，几乎不丢数据</td>
+<td align="center">性能影响大</td>
+</tr>
+<tr>
+<td align="center"><u>everysec</u></td>
+<td align="center"><u>每秒刷盘</u></td>
+<td align="center"><u>性能适中</u></td>
+<td align="center"><u>最多丢失1秒数据</u></td>
+</tr>
+<tr>
+<td align="center">no</td>
+<td align="center">操作系统控制</td>
+<td align="center">性能最好</td>
+<td align="center">可靠性较差，可能丢失大量数据</td>
+</tr>
+</tbody></table>
+<p>因为是记录命令，AOF文件会比RDB文件大的多。而且AOF会记录对同一个key的多次写操作，但<strong>只有最后一次写操作才有意义</strong>。<u>通过执行<code>bgrewriteaof</code>命令，可以让AOF文件执行重读功能，用最少的命令达到相同效</u>果</p>
+<p>Redis会在出发阈值时自动重写AOF文件。阈值也可以在redis.conf中配置</p>
+<pre><code class="mysql"># AOF文件比上次文件 增多超过多少百分比则触发重写
+auto-aof-rewrite-percentage 100
+# AOF文件体积最小多大以上才触发重写
+auto-aof-rewrite-min-size 64mb
+</code></pre>
+<p><strong>★★★★★★★★ RDB与AOF对比 ★★★★★★★★</strong></p>
+<p>RDB和AOF各有优缺点，如果对数据安全性要求较高，在实际开发中往往会结合两者来使用<br>RDB是二进制文件，在保存时体积较小恢复较快，但也有可能丢失数据，我们通常在项目中使用AOF来恢复数据，虽然慢但丢失数据风险小，在AOF文件中可以设置刷盘策略(每秒批量写入一次命令)</p>
+<table>
+<thead>
+<tr>
+<th align="center"></th>
+<th align="center">RDB</th>
+<th align="center">AOF</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center">持久化方式</td>
+<td align="center">定时对整个内存做快照哦</td>
+<td align="center">记录每一次执行的命令</td>
+</tr>
+<tr>
+<td align="center">数据完整性</td>
+<td align="center">不完整，两次备份之间会丢失</td>
+<td align="center">相对完整，取决于刷盘策略</td>
+</tr>
+<tr>
+<td align="center">文件大小</td>
+<td align="center">会有压缩，文件体积小</td>
+<td align="center">记录命令，文件体积大</td>
+</tr>
+<tr>
+<td align="center">宕机恢复速度</td>
+<td align="center">很快</td>
+<td align="center">慢</td>
+</tr>
+<tr>
+<td align="center">数据恢复优先级</td>
+<td align="center">低，因为数据完整性不如AOF</td>
+<td align="center">高，因为数据完整性更高</td>
+</tr>
+<tr>
+<td align="center">系统资源占用</td>
+<td align="center">高，大量CPU和内存消耗</td>
+<td align="center">低，主要是磁盘IO资源<br />但AOF重写时会占用大量CPU和内存资源</td>
+</tr>
+<tr>
+<td align="center">使用场景</td>
+<td align="center">可以容忍数分钟的数据丢失，追求更快的启动速度</td>
+<td align="center">对数据安全性要求较高常见</td>
+</tr>
+</tbody></table>
+<h4 id="项目中是怎么使用redis的"><a href="#项目中是怎么使用redis的" class="headerlink" title="项目中是怎么使用redis的"></a>项目中是怎么使用redis的</h4><p>需要结合项目中的业务进行回答，通常情况下，分布式锁的使用场景：<br>集群情况下的定时任务、抢单、幂等性场景<br>如果使用互斥锁的话 那么在集群项目有多个服务器就会出现问题</p>
+<p>用Hash类型  大Key是Id  小key是商品id value是商品数量<br>数据量点击量 用String类型<br>用Set类型 Zset做排行榜</p>
+<h4 id="你的项目中哪里使用到分布式锁"><a href="#你的项目中哪里使用到分布式锁" class="headerlink" title="你的项目中哪里使用到分布式锁?"></a>你的项目中哪里使用到分布式锁?</h4><p>&#x3D;&#x3D;<strong>Redis分布式锁</strong>&#x3D;&#x3D;</p>
+<p>Redis实现分布式锁主要利用Redis的<strong>setnx</strong>命令，setnx是**<u>SET if not exists</u>**(如果不存在，则SET)的简写</p>
+<ul>
+<li><p><strong>获取锁</strong></p>
+<blockquote>
+<p>添加锁，NX是互斥、EX是设置超时时间<br><strong>SET lock value NX EX 10</strong></p>
+</blockquote>
+</li>
+<li><p><strong>释放锁</strong></p>
+<blockquote>
+<p>释放锁，删除即可<br><strong>DEL key</strong></p>
+</blockquote>
+</li>
+</ul>
+<h4 id="你可以说一下redis的分布式锁的原理吗"><a href="#你可以说一下redis的分布式锁的原理吗" class="headerlink" title="你可以说一下redis的分布式锁的原理吗"></a>你可以说一下redis的分布式锁的原理吗</h4><h4 id="我在项目中是集成了redisson-底层基于Lua脚本-具有原子性"><a href="#我在项目中是集成了redisson-底层基于Lua脚本-具有原子性" class="headerlink" title="我在项目中是集成了redisson(底层基于Lua脚本[具有原子性])"></a><del>我在项目中是集成了redisson(底层基于Lua脚本[具有原子性])</del></h4><p>&#x3D;&#x3D;<strong>redisson实现分布式锁 - 执行流程</strong>&#x3D;&#x3D;</p>
+<blockquote>
+<p>加锁 ↓→ 加锁成功 → <strong>Watch dog(看门狗)<del>每隔(releaseTime&#x2F;3的时间做一次续期)</del></strong> → Redis<br>↓        操作redis → Redis<br>↓→→ 释放锁↑ → 通知看门狗无需继续监听 → Redis</p>
+</blockquote>
+<blockquote>
+<p>加锁  → → → 是否加锁成功？→→→   ↓<br>↑←←while循环不断尝试获取锁←←←↓</p>
+</blockquote>
+<pre><code class="java">public void redisLock() throws InterruptedException&#123;
+    RLock lock = redissonClient.getLock(&quot;heimalock&quot;);
+ // boolean isLock = lock.tryLock(10, 30, TimeUnit.SECONDS);
+// 如果不设置中间的过期时间30 才会触发看门狗
+// 加锁，设置过期时间等操作都是基于lua脚本完成的[调用redis命令来保证多条命令的原子性]
+    boolean isLock = lock.tryLock(10, TimeUnit.SECONDS);
+    if(isLock)&#123;
+        try&#123;
+            sout(&quot;执行业务&quot;);
+        &#125; finally&#123;
+            lock.unlock();
+        &#125;
+    &#125;
+&#125;
+</code></pre>
+<p>&#x3D;&#x3D;<strong>redisson实现分布式锁 - 可重入</strong>&#x3D;&#x3D;</p>
+<blockquote>
+<p>redis实现分布式锁是不可重入的 但是 redisson实现分布式锁是可以重入的<br>可重入原理：它俩是同一个线程 每个线程都有唯一的线程id 根据线程id唯一标识做判断 判断之前获取锁是不是同一个线程<br><strong>利用hash结构</strong>记录<strong>线程id</strong>和<strong>重入次数</strong></p>
+<table>
+<thead>
+<tr>
+<th align="center">KEY</th>
+<th align="center">VALUE</th>
+<th align="center">VALUE</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="center"></td>
+<td align="center">field</td>
+<td align="center">value</td>
+</tr>
+<tr>
+<td align="center">heimalock</td>
+<td align="center">thread1</td>
+<td align="center">0</td>
+</tr>
+</tbody></table>
+</blockquote>
+<pre><code class="java">public void add1()&#123;
+  RLock lock = redissonClient.getLock(&quot;heimalock&quot;);
+  boolean isLock = lock.tryLock();
+// 执行业务
+  add2();
+// 释放锁
+  lock.unlock();
+&#125;
+public void add2()&#123;
+  RLock lock = redissonClient.getLock(&quot;heimalock&quot;);
+  boolean isLock = lock.tryLock();
+// 执行业务
+// 释放锁 锁次数-1不完全释放
+  lock.unlock();
+&#125;
+</code></pre>
+<p>&#x3D;&#x3D;<strong>redisson实现分布式锁 - 主从一致性</strong>&#x3D;&#x3D;</p>
+<p>Redis Master主节点：主要负责<strong>写操作</strong>(增删改) <del>只能写</del><br>Redis Slave从节点：主要负责<strong>读操作</strong><del>只能读</del></p>
+<blockquote>
+<p>当RedisMaster主节点突然宕机后 Java应用会去格外获取锁 这时两个线程就同时持有一把锁 容易出现脏数据<br>怎么解决呢？</p>
+</blockquote>
+<ul>
+<li><strong>RedLock(红锁)<strong>：不能只在一个redis实例上创建锁，应该是在多个redis实例上创建锁</strong>(n&#x2F;2+1)<strong>，避免在一个redis实例【实现复杂、性能差、运维繁琐】怎么解决？→ <strong>CP思想</strong>：</strong>zookeeper</strong></li>
+</ul>
+<h4 id="redis和mysql怎么保证数据一致性"><a href="#redis和mysql怎么保证数据一致性" class="headerlink" title="redis和mysql怎么保证数据一致性"></a>redis和mysql怎么保证数据一致性</h4><p><strong>写</strong>先插入数据库<br><u><strong>更新</strong>先更新数据库 更新数据库成功但redis不成功 影响不大 因为后面会有过期删除 最终会一致，更新mysql后缓存可以删除也可以修改</u><br><u>更新完数据库直接删除缓存了  有过期时间兜底 最终会保持一致 我们项目中对数据敏感性一致性不高 我们追求实时性</u><br><u>如果是最终保持一致性的就MQ 我们对实时性不高 对数据敏感性 一致性高</u><br><strong>删除</strong>问题不大 哪里都行！<br>读多写少的可以上缓存<br>mysql保存购物车表 但是再页面操作的时候 只操作redis 用<strong>mq</strong>给到消费者修改或<strong>定时任务</strong> 更新数据到mysql，MQ问题：我们对数据实时性要求不高 只需要保存最终一致性就行<br><strong>你如果只写redis 万一丢了数据怎么办</strong>？<br>购物车丢点订单无影响 数据安全性要求不太高 mysql尽量不要搞购物车的表 都在redis的表 丢就丢了呗。或者异步同步&#x2F;定时任务<br>实时性要求 安全性要求 → MySQL<br>电商一般数据库和mysql都要存 → 读多写少</p>
+<p><strong>一定、一定、一定要设置前提，介绍自己的业务背景</strong> (一致性要求高？允许延迟一致？)</p>
+<blockquote>
+<p>① 介绍自己简历上的业务，我们当时是把文章的热点数据存入到了缓存中，虽然是热点数据，但是实时要求性并没有那么高，所以我们采用的是<strong>异步的方案同步的数据</strong></p>
+<p>② 我们当时是把抢卷的库存存入到了缓存中，这个需要实时的进行数据同步，为了保证数据的强一致性，我们当时采用的是<strong>redission提供的读写锁</strong>来保证数据的同步</p>
+</blockquote>
+<p><strong>双写一致性：</strong>当修改了数据库的数据也要同时更新缓存的数据，缓存和数据库的数据要保持一致</p>
+<ul>
+<li><p>读操作：缓存命中，直接返回；缓存未命中查询数据库，写入缓存，设定超时时间</p>
+</li>
+<li><p>写操作：<strong>延迟双删</strong> [因为无论<strong>先删除缓存</strong>还是<strong>先删除数据库</strong>都可能会出数据不一致问题 <strong>有脏数据</strong>]</p>
+</li>
+<li><p>&#x3D;&#x3D;<strong>基于redisson互斥锁</strong>：&#x3D;&#x3D;[放入缓存中的数据 读多写少] 【强一致性业务 性能低】<del>有过期时间兜底</del></p>
+<ul>
+<li><strong>共享锁</strong>：读锁readLock，加锁之后，其他线程可以<strong>共享读操作</strong>，但**<u>不允许写操作</u>**</li>
+<li><strong>排他锁</strong>：独占锁writeLock也叫，加锁之后，阻塞其他线程读写操作(只允许一个用户或进程独占地对数据进行读取和写入操作)<del>排他锁确保了写操作的原子性和一致性</del></li>
+<li>读数据的时候添加<u>共享锁(</u>读不互斥、写互斥)  </li>
+<li>写数据的时候添加<u>排他锁</u>(阻塞其他线程的读写 因为读多写少)</li>
+</ul>
+<blockquote>
+<p>redissionClient.getReadWriteLock(“xxxx”);</p>
+</blockquote>
+</li>
+<li><p>&#x3D;&#x3D;<strong>异步通知：</strong>&#x3D;&#x3D;<u>异步通知保证数据的最终一致性</u>(需要保证MQ的可靠性)<del>需要在Redis中更新数据的同时，通知另一个服务进行某些操作。</del></p>
+<ul>
+<li><strong>使用场景</strong>：<ul>
+<li><strong>缓存与数据库双写</strong>： 当应用需要同时更新Redis缓存和数据库时，可以先将数据写入Redis，然后通过异步通知机制触发数据库的更新操作。</li>
+<li><strong>跨地域数据复制</strong>： 在跨地域部署的服务中，为了实现数据的最终一致性，可以在一个地域写入数据后，通过异步通知机制在另一个地域进行数据复制。</li>
+<li><strong>系统间数据同步</strong>： 在微服务架构中，不同的服务可能有自己的数据存储。当一个服务更新了数据后，可以通过异步通知机制告知其他相关服务进行数据同步。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><p>&#x3D;&#x3D;<strong>基于Canal的异步通知</strong>&#x3D;&#x3D;：监听mysql的binlog<br>可以解析binlog文件 可以存放mysql里面的数据 看最近有无增删改查 转换成redis命令 再给redis里面</p>
+<ul>
+<li>使用MQ中间件，更新数据之后，通知缓存删除</li>
+<li>利用canal中间件，不需要修改业务代码，伪装为mysqls的一个从节点，canal通过读取binlog数据更新缓存</li>
+</ul>
+</li>
+</ul>
+<h4 id="synchronized可以作用在哪些地方，分别锁的是什么"><a href="#synchronized可以作用在哪些地方，分别锁的是什么" class="headerlink" title="synchronized可以作用在哪些地方，分别锁的是什么"></a>synchronized可以作用在哪些地方，分别锁的是什么</h4><p>在Java中，<code>synchronized</code>关键字可以用来实现线程同步，它可以作用在不同的地方，并且锁定的对象也不同：</p>
+<ol>
+<li><p><strong>实例方法</strong>：</p>
+<ul>
+<li>作用在实例方法上时，锁的是调用该方法的<strong>对象实例</strong>（即**<u>this对象</u>**）。</li>
+<li>任何线程想要执行这个方法，都必须获得该对象实例的锁。</li>
+</ul>
+<pre><code>public synchronized void synchronizedMethod() &#123;
+    // 方法体
+&#125;
+</code></pre>
+</li>
+<li><p><strong>静态方法</strong>：</p>
+<ul>
+<li>作用在静态方法上时，锁的是类的<strong>Class对象</strong>。</li>
+<li>由于静态方法是属于类的，而不是属于任何特定实例，所以所有线程要想执行这个静态同步方法，都必须获得该类的Class对象的锁。</li>
+</ul>
+<pre><code>public static synchronized void synchronizedStaticMethod() &#123;
+    // 方法体
+&#125;
+</code></pre>
+</li>
+<li><p><strong>代码块</strong>：</p>
+<ul>
+<li>作用在代码块上时，可以指定一个<strong>锁对象<del>括号里的对象</del><strong>，可以是</strong>任何对象</strong>。</li>
+<li>当进入这个代码块时，线程必须获得指定锁对象的锁。</li>
+</ul>
+<pre><code>public void synchronizedBlock() &#123;
+    synchronized(this) &#123; // 锁定当前对象实例
+        // 代码块
+    &#125;
+&#125;
+
+public void synchronizedBlockWithObject() &#123;
+    Object lock = new Object();
+    synchronized(lock) &#123; // 锁定指定的对象
+        // 代码块
+    &#125;
+&#125;
+</code></pre>
+</li>
+</ol>
+<p><span style = "color:red"><strong>什么情况下索引会失效？</strong></span></p>
+<blockquote>
+<ul>
+<li>违反最左前缀法则</li>
+<li>范围查询右边的列，不能使用索引</li>
+<li>不要在索引列上进行<strong>运算操作</strong>，索引将失效</li>
+<li>字符串不加单引号，造成索引失效。(类型转换)</li>
+<li>以%开头的Like模糊查询，索引失效<br>[不影响正常查询业务 但未运用超大分页查询优化 会导致索引失效]</li>
+</ul>
+</blockquote>
+<p><span style = "color:red"><strong>索引创建原则有哪些？</strong></span><del>索引很多就会有很多B+树</del></p>
+<blockquote>
+<p>① <strong>数据量较大，且查询比较频繁的表</strong><br>② <strong>常作为查询条件、排序、分组的字段</strong> [where、group by、order by]<br>③ 字段内容区分度高<br>④ 内容较长，使用前缀索引<br>⑤ <strong>尽量联合索引</strong><del>对存储节省空间</del></p>
+<pre><code class="java">如果我们经常根据客户ID和订单日期来查询订单，那么可以在 customer_id 和 order_date 上创建一个联合索引。
+CREATE INDEX idx_customer_date ON orders (customer_id, order_date);
+
+这个联合索引 idx_customer_date 有以下几个特点：
+
+索引顺序：首先根据 customer_id 排序，然后在每个 customer_id 的基础上根据 order_date 排序。
+查询优化：以下查询可以利用这个联合索引：
+SELECT * FROM orders WHERE customer_id = ? AND order_date = ?;
+SELECT * FROM orders WHERE customer_id = ?;
+</code></pre>
+<p>⑥ <strong>要控制索引的数量</strong><br>⑦ 如果索引列不能存储NULL值，请在创建表时使用NOT NULL约束它<br>大字段不建议建立索引是因为B+树一个叶子节点&#x2F;一个非叶子节点 差不多16k 一个节点对应一个[页] 多的话会更多层<br>尽量不用性别去创建索引</p>
+</blockquote>
+<blockquote>
+<ul>
+<li>先陈述自己再实际工作中是怎么用的</li>
+<li>主键索引</li>
+<li>唯一索引</li>
+<li>根据业务创建的索引(复合索引)</li>
+</ul>
+</blockquote>
+<p><span style = "color:red"><strong>索引的底层数据结构了解过吗？</strong></span></p>
+<blockquote>
+<p>MySQL的InnoDB引擎采用的B+树的数据结构来存储索引</p>
+<ul>
+<li>阶数更多，路径更短</li>
+<li>磁盘读写代价B+树更低，非叶子节点只存储指针，叶子阶段存储数据</li>
+<li>B+树便于扫库和区间查询，叶子节点是一个双向链表</li>
+</ul>
+</blockquote>
+<p>**<u>MySQL默认使用的索引底层数据结构是B+树</u>**。再聊B+树之前，先来聊聊二叉树和B树</p>
+<p>&#x3D;&#x3D;<strong>B Tree</strong>(<strong>矮胖树</strong>)&#x3D;&#x3D;，B树是一种多叉路衡查找树，相对于二叉树，B树每个节点可以有多个分支，即多叉。以一颗最大度数(max-degree)为5(5阶)的b-tree为例，那这个B树每个节点最多存储4个key</p>
+<p>&#x3D;&#x3D;<strong>B+Tree</strong>&#x3D;&#x3D; 是再BTree基础上的一种优化，使其更适合实现外存储索引结构，InnoDB存储引擎就是B+Tree实现其索引结构</p>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/264cd6bd9cf733e6fe23dd38f6959fe688dec2d9/B%20Tree%20%E5%92%8C%20B+Tree.png"></p>
+<p><strong>B树与B+树对比</strong>：</p>
+<ul>
+<li>磁盘读写代价B+树更低</li>
+<li>查询效率B+树更加稳定</li>
+<li>B+树便于扫库和区间查询</li>
+</ul>
+<blockquote>
+<p><strong>B树</strong>要找12 首先找38 左面小 再去缩小范围16和29 找到12 → 但是我们只想要12的数据 B树会额外的把38,16,29的数据全查一遍最后才到12的数据</p>
+<p><strong>B+树</strong>是在叶子节点才会存储数据，在非叶子节点全是指针，这样就没有其他乱七八糟的数据影响 。且查找路径是差不多的，效率较稳定</p>
+<p><strong>便于扫库</strong>：比如我们要查询6-34区间的数据，先去根节点扫描一次38 → 16-29 → 由于叶子节点之间有双向指针，就可以一次性把所有数据都给拿到[无需再去根节点找一次]</p>
+</blockquote>
+<h4 id="mysql底层为什么用B-树利用二分查找-树越矮经过磁盘IO次数越少-它是稳定的每次都查到最底层"><a href="#mysql底层为什么用B-树利用二分查找-树越矮经过磁盘IO次数越少-它是稳定的每次都查到最底层" class="headerlink" title="mysql底层为什么用B+树利用二分查找,树越矮经过磁盘IO次数越少,它是稳定的每次都查到最底层"></a>mysql底层为什么用B+树<del>利用二分查找,树越矮经过磁盘IO次数越少,它是稳定的每次都查到最底层</del></h4><p><del><strong>二叉树</strong> O(logn) 容易退化成链表 所以不用它</del><br><del><strong>平衡二叉树</strong> 全部倾斜</del><br><del><strong>红黑树</strong> 一个节点只能存一个数据</del><br>B树能不能除了叶子节点其他不存数据呢？</p>
+<blockquote>
+<p>你可以设计一种变体的B树，其中只有叶子节点存储数据，而所有其他非叶子节点仅作为导航节点，不存储实际的数据。这种结构在概念上类似于B树的一个特例，通常被称为B树索引结构的一部分，其中非叶子节点存储的是键值，而叶子节点存储的是实际的数据记录或者是指向数据记录的指针</p>
+</blockquote>
+<p>B+树第三层2000多万条数据，尽量不要把数据达到2000多万<br>B+树叶子节点加了双向链表 让我们查询更加稳定 范围查询会更快</p>
+<h6 id="mysql索引底层不一定只有B-树，也可能是Hash-在精准查询性能比它高"><a href="#mysql索引底层不一定只有B-树，也可能是Hash-在精准查询性能比它高" class="headerlink" title="mysql索引底层不一定只有B+树，也可能是Hash 在精准查询性能比它高"></a>mysql索引底层不一定只有B+树，也可能是Hash 在精准查询性能比它高</h6><p><strong>R—Tree</strong>：地理位置搜索</p>
+<h6 id="联合索引"><a href="#联合索引" class="headerlink" title="联合索引"></a>联合索引</h6><p><code>where b= AND c= AND a= </code> 这样走索引都能走 底层自己排序<br>为什么联合索引要遵循最左匹配原则【里面的b+树 先按照a排序 再b 因为要二分查找 不排序怎么找？】</p>
+<p><span style = "color:red"><strong>在MySQL中，如何定位慢查询？</strong></span><del>查询前用explain查询是否走了索引等问题</del></p>
+<h6 id="explain查询后的列："><a href="#explain查询后的列：" class="headerlink" title="explain查询后的列："></a>explain查询后的列：</h6><pre><code class="java">id：查询中SELECT语句的序列号，如果该行引用其他行的并集结果，则该值可以为空。
+select_type：表示查询的类型，常见的类型有：
+SIMPLE：简单的SELECT查询，不使用UNION或子查询。
+PRIMARY：最外层的SELECT查询。
+UNION：在UNION中的第二个或随后的SELECT查询。
+DEPENDENT UNION：在UNION中的第二个或随后的SELECT查询，取决于外层查询。
+UNION RESULT：UNION的结果。
+SUBQUERY：子查询中的第一个SELECT。
+DEPENDENT SUBQUERY：子查询中的第一个SELECT，取决于外层查询。
+table：查询的是哪个表。
+type：这是你提到的一个非常重要的列，它表示MySQL在表中找到所需行的方式，也称为“访问类型”。以下是一些常见的访问类型，从最好到最差排序：
+system：表只有一行（系统表）。
+const：表最多有一个匹配行，它将在查询开始时被读取。因为仅有一行，所以优化器的其余部分可以将这一行视为常量。
+eq_ref：对于每个来自于前面的表的行组合，从该表中读取一行。这通常是最好的联接类型，除了const类型。
+ref：对于每个来自于前面的表的行组合，所有有匹配索引值的行将从这张表中读取。
+fulltext：使用全文索引执行查询。
+ref_or_null：与ref类似，但是MySQL会额外搜索包含NULL值的行。
+index_merge：表示查询使用了两个或更多的索引。
+unique_subquery：用于IN子查询，子查询返回不重复的值集。
+index_subquery：用于IN子查询，子查询返回不重复的值集，可以使用索引。
+range：使用索引来检索给定范围的行。
+index：全索引扫描（比ALL快，因为索引通常比数据行小）。
+ALL：全表扫描，这是最差的一种类型，因为MySQL必须检查每一行以找到匹配的行。
+possible_keys：指出MySQL能使用哪些索引来优化查询。
+key：MySQL实际决定使用的索引。
+key_len：使用的索引的长度。越短越好。
+ref：显示索引的哪一列被使用了，如果可能的话，是一个常数。
+rows：MySQL认为必须检查的用来返回请求数据的行数。
+filtered：显示了通过条件过滤出的行数的百分比估计。
+Extra：包含MySQL解析查询的额外信息，例如是否使用了索引，是否排序了结果，是否使用了临时表等
+</code></pre>
+<blockquote>
+<p>1.介绍一下当时产生问题的场景(我们当时的一个接口测试的时候非常的慢，压测的结果大概5秒钟)<br>2.我们系统中当时采用了运维工具(<strong>Skywalking</strong>)，可以监测出哪个接口，最终因为是sql的问题<br>3.在mysql中开启了慢日志查询，我们设置的值就是2秒，一旦sql执行超过2秒就会记录到日志中(调试阶段)</p>
+</blockquote>
+<blockquote>
+<p>产生原因：</p>
+<ul>
+<li>聚合查询</li>
+<li>多表查询</li>
+<li>表数据量过大查询</li>
+<li>深度分页查询</li>
+</ul>
+</blockquote>
+<p><strong>方案一：</strong>&#x3D;&#x3D;<strong>开源工具</strong>&#x3D;&#x3D;[调试阶段才会开启  生产阶段不会开启]</p>
+<ul>
+<li>调试工具Arthas</li>
+<li>运维工具：Prometheus、SKywalking(接口访问时间)</li>
+</ul>
+<p><strong>方案二：</strong>&#x3D;&#x3D;<strong>MySQL自带慢日志</strong>&#x3D;&#x3D;</p>
+<p>慢查询日志记录了所有执行时间超过指定参数(long_query_time, 单位：秒，默认10秒)的所有SQL语句的日志，如果要开启慢查询日志，需要在MySQL的配置文件(&#x2F;etc&#x2F;my.cnf)中配置信息：</p>
+<pre><code class="mysql"># 开启MySQL慢日志查询开关
+slow_query_log = 1
+# 设置慢日志的时间为2秒，SQL语句执行时间超过2秒，就会被视为慢查询，记录慢查询日志
+long_query_time = 2
+</code></pre>
+<p><span style = "color:red"><strong>什么是聚簇索引？什么是非聚簇索引(二级索引)？什么是回表？</strong></span></p>
+<blockquote>
+<ul>
+<li><strong>聚簇索引(聚集索引)<strong>：数据与索引放到一块，B+树的叶子节点保存了整行数据，</strong>有且只有一个</strong>【id存放的b+树】</li>
+<li>**非聚簇索引(二级索引)**：数据与索引分开存储，B+树的叶子节点保存对应的主键，可以有多个【叶子就是id的字段】</li>
+<li><strong>回表查询</strong>：通过二级索引找到对应的主键值，到聚集索引中查找正行数据，这个过程就是回表</li>
+</ul>
+<p>怎么避免回表 → 使用覆盖索引！<br>需要name 直接 select name 而不用 select *<br>要按需来查找</p>
+</blockquote>
+<pre><code class="java">除了InnoDB，MySQL数据库还支持多种其他存储引擎，其中最著名的是MyISAM。以下是InnoDB和MyISAM两个存储引擎的主要区别：
+
+事务支持：
+InnoDB：支持事务，它遵循ACID原则（原子性、一致性、隔离性和持久性）。如果事务中的某个操作失败，整个事务可以回滚到开始状态。
+MyISAM：不支持事务，这意味着你无法回滚操作，这对于数据完整性和恢复可能是一个问题。
+    
+锁定机制：
+InnoDB：使用行级锁定，只锁定需要的特定行，这可以大大减少数据库操作的冲突。
+MyISAM：使用表级锁定，每次操作都会锁定整个表，这在并发操作较多时可能导致性能问题。
+    
+崩溃恢复：
+InnoDB：具有自动崩溃恢复功能，即使数据库崩溃，也不会丢失数据，因为它将事务日志写入磁盘。
+MyISAM：在崩溃后恢复较为困难，可能会丢失数据，因为它不记录事务日志。
+    
+全文搜索：
+InnoDB（MySQL 5.6及以后版本）：支持全文索引，但功能上不如MyISAM的全文搜索强大。
+MyISAM：提供了更强大的全文搜索功能，但在MySQL 5.6之前，这是MyISAM相对于InnoDB的主要优势。
+    
+存储限制：
+InnoDB：表的大小理论上受限于操作系统的文件大小限制，通常可以处理更大的数据量。
+MyISAM：表的大小受限于最大文件大小，通常是2GB到4GB，这取决于文件系统的限制。
+    
+外键支持：
+InnoDB：支持外键约束，这有助于保持数据的引用完整性。
+MyISAM：不支持外键约束。
+    
+存储空间：
+InnoDB：通常需要更多的存储空间，因为它存储了额外的信息来支持事务和行级锁定。
+MyISAM：通常占用更少的存储空间，因为它不需要存储这些额外的信息
+</code></pre>
+<table>
+<thead>
+<tr>
+<th align="left">分类</th>
+<th align="left">含义</th>
+<th align="left">特点</th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">&#x3D;&#x3D;<strong>聚集索引</strong>(Clustered Index)&#x3D;&#x3D;</td>
+<td align="left">将数据存储与索引放到了一块，索引结构的叶子节点保存了行数据</td>
+<td align="left">必须有, 而且只有一个</td>
+</tr>
+<tr>
+<td align="left">&#x3D;&#x3D;<strong>二级索引</strong>(Secondary Index)&#x3D;&#x3D;</td>
+<td align="left">将数据与索引分开存储，索引结构的叶子节点关联的是对应的主键</td>
+<td align="left">可以存在多个</td>
+</tr>
+</tbody></table>
+<p><strong>聚集索引选取规则：</strong></p>
+<ul>
+<li>如果存在主键，主键索引就是聚集索引</li>
+<li>如果不存在主键，将使用第一个唯一 (UNIQUE) 索引作为聚集索引</li>
+<li>如果表没有主键，或没有合适的唯一索引，则InnoDB会自动生成一个rowid作为隐藏的聚集索引</li>
+</ul>
+<p><img src="https://github.com/P-luminary/images/blob/master/%E8%81%9A%E7%B0%87%E7%B4%A2%E5%BC%95%20%E5%92%8C%20%E9%9D%9E%E8%81%9A%E7%B0%87%E7%B4%A2%E5%BC%95.jpg?raw=true"></p>
+<p>&#x3D;&#x3D;<strong>回表查询</strong>&#x3D;&#x3D;</p>
+<p><code>select * from user where name = &#39;Arm&#39;;</code></p>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/25accb51fee1e0b8d57deebf6bfe38e3868b32bf/%E5%9B%9E%E8%A1%A8%E6%9F%A5%E8%AF%A2.png"></p>
 
     </div>
 

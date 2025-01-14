@@ -2046,6 +2046,47 @@ rabbitmq:3.8-management
 <li>主宕机后，镜像节点会替代成新的主（如果在主从同步完成前，主就已经宕机，可能出现数据丢失）</li>
 <li>不具备负载均衡功能，因为所有操作都会有主节点完成（但是不同队列，其主节点可以不同，可以利用这个提高吞吐量）</li>
 </ul>
+<blockquote>
+<p>为什么需要镜像集群和备份节点：</p>
+<ol>
+<li><strong>高可用性（High Availability）</strong>：<ul>
+<li>镜像集群可以确保当某个节点发生故障时，系统可以自动切换到其他健康的节点，从而减少或消除服务中断的时间。</li>
+<li>在分布式系统中，硬件故障、网络问题或软件错误是不可避免的，镜像集群通过冗余来提高系统的整体可用性。</li>
+</ul>
+</li>
+<li><strong>数据冗余</strong>：<ul>
+<li>镜像集群通过在不同的物理位置存储数据的多个副本，确保数据不会因为单点故障而丢失。</li>
+<li>这种冗余可以保护数据免受磁盘损坏、数据中心故障等事件的影响。</li>
+</ul>
+</li>
+<li><strong>负载均衡</strong>：<ul>
+<li>镜像集群可以将请求分发到不同的节点，从而平衡负载，提高系统的处理能力。</li>
+<li>在高流量情况下，负载均衡可以确保所有用户都能获得良好的服务体验。</li>
+</ul>
+</li>
+<li><strong>故障转移（Failover）</strong>：<ul>
+<li>当主节点发生故障时，镜像集群可以自动将工作负载转移到备份节点，实现无缝的故障转移。</li>
+<li>这确保了服务的连续性，用户通常不会意识到后台发生了故障切换。</li>
+</ul>
+</li>
+<li><strong>数据备份</strong>：<ul>
+<li>镜像集群本身就是一个实时备份的解决方案，它可以在数据发生变更时立即复制到其他节点。</li>
+<li>这样即使发生灾难性故障，也可以快速恢复数据。</li>
+</ul>
+</li>
+<li><strong>维护和升级</strong>：<ul>
+<li>在进行系统维护或升级时，可以先将流量切换到镜像节点，然后在主节点上进行操作，从而减少对用户的影响。</li>
+</ul>
+</li>
+</ol>
+<p>以下是为什么你需要备份节点的原因：</p>
+<ul>
+<li><strong>灾难恢复</strong>：在面临自然灾害、硬件故障或其他导致整个系统瘫痪的事件时，备份节点可以作为恢复点，帮助快速恢复服务。</li>
+<li><strong>数据保护</strong>：备份节点可以保护数据免受意外删除、恶意攻击或逻辑错误的影响。</li>
+<li><strong>合规性要求</strong>：某些行业或地区可能有法规要求必须对数据进行备份，以符合数据保护的规定。</li>
+<li><strong>业务连续性</strong>：备份节点确保了业务的连续性，即使在面对严重问题时，也能保持运营。</li>
+</ul>
+</blockquote>
 <h2 id="4-2-镜像模式的配置"><a href="#4-2-镜像模式的配置" class="headerlink" title="4.2.镜像模式的配置"></a>4.2.镜像模式的配置</h2><p>镜像模式的配置有3种模式：</p>
 <table>
 <thead>
@@ -2274,16 +2315,11 @@ public class ConsumerTest &#123;
 </ol>
 <p>基本消息队列的消息接收流程：</p>
 <ol>
-<li><p>建立connection</p>
-</li>
-<li><p>创建channel</p>
-</li>
-<li><p>利用channel声明队列</p>
-</li>
-<li><p>定义consumer的消费行为handleDelivery()</p>
-</li>
-<li><p>利用channel将消费者与队列绑定</p>
-</li>
+<li>建立connection</li>
+<li>创建channel</li>
+<li>利用channel声明队列</li>
+<li>定义consumer的消费行为handleDelivery()</li>
+<li>利用channel将消费者与队列绑定</li>
 </ol>
 <h1 id="3-SpringAMQP"><a href="#3-SpringAMQP" class="headerlink" title="3.SpringAMQP"></a>3.SpringAMQP</h1><p>SpringAMQP是基于RabbitMQ封装的一套模板，并且还利用SpringBoot对其实现了自动装配，使用起来非常方便。</p>
 <p>SpringAmqp的官方地址：<a target="_blank" rel="noopener" href="https://spring.io/projects/spring-amqp">https://spring.io/projects/spring-amqp</a></p>
@@ -2654,6 +2690,467 @@ public void testSendTopicExchange() &#123;
 </ul>
 <hr>
 <hr>
+<h1 id="服务异步通信-高级篇-RabbitMQ"><a href="#服务异步通信-高级篇-RabbitMQ" class="headerlink" title="服务异步通信-高级篇(RabbitMQ)"></a>服务异步通信-高级篇(RabbitMQ)</h1><p>消息队列在使用过程中，面临着很多实际问题需要思考：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day03-MQ高级\讲义\md\assets\image-20210718155003157.png" alt="image-20210718155003157"></p>
+<h1 id="1-消息可靠性"><a href="#1-消息可靠性" class="headerlink" title="1.消息可靠性"></a>1.消息可靠性</h1><p>消息从发送，到消费者接收，会经理多个过程：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day03-MQ高级\讲义\md\assets\image-20210718155059371.png" alt="image-20210718155059371"></p>
+<p>其中的每一步都可能导致消息丢失，常见的丢失原因包括：</p>
+<ul>
+<li>发送时丢失：<ul>
+<li>生产者发送的消息未送达exchange</li>
+<li>消息到达exchange后未到达queue</li>
+</ul>
+</li>
+<li>MQ宕机，queue将消息丢失</li>
+<li>consumer接收到消息后未消费就宕机</li>
+</ul>
+<p>针对这些问题，RabbitMQ分别给出了解决方案：</p>
+<ul>
+<li>生产者确认机制</li>
+<li>mq持久化</li>
+<li>消费者确认机制</li>
+<li>失败重试机制</li>
+</ul>
+<p>下面我们就通过案例来演示每一个步骤。</p>
+<p>首先，导入课前资料提供的demo工程：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day03-MQ高级\讲义\md\assets\image-20210718155328927.png" alt="image-20210718155328927"></p>
+<p>项目结构如下：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day03-MQ高级\讲义\md\assets\image-20210718155448734.png" alt="image-20210718155448734"></p>
+<h2 id="1-1-生产者消息确认"><a href="#1-1-生产者消息确认" class="headerlink" title="1.1.生产者消息确认"></a>1.1.生产者消息确认</h2><p>RabbitMQ提供了publisher发送消息机制来避免消息发送到MQ过程中丢失。这种机制必须给每个消息指定一个唯一ID。消息发送到MQ以后，会返回一个结果给发送者，表示消息是否处理成功。</p>
+<p>返回结果有两种方式：</p>
+<ul>
+<li>publisher-confirm，发送者确认<del>判断消息是否成功到达交换机</del><ul>
+<li>消息成功投递到交换机，返回ack</li>
+<li>消息未投递到交换机，返回nack</li>
+</ul>
+</li>
+<li>publisher-return，发送者回执<del>回调</del><ul>
+<li>消息投递到交换机了，但是没有路由到队列。返回ACK，及路由失败原因。</li>
+</ul>
+</li>
+</ul>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day03-MQ高级\讲义\md\assets\image-20210718160907166.png" alt="image-20210718160907166"></p>
+<p>注意：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day03-MQ高级\讲义\md\assets\image-20210718161707992.png" alt="image-20210718161707992"></p>
+<h3 id="1-1-1-修改配置"><a href="#1-1-1-修改配置" class="headerlink" title="1.1.1.修改配置"></a>1.1.1.修改配置</h3><p>首先，我们需要引入课前资料提供的mq-advanced-demo工程：</p>
+<p>修改publisher服务中的application.yml文件，添加下面的内容：</p>
+<pre><code class="yaml">spring:
+  rabbitmq:
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+</code></pre>
+<p>说明：</p>
+<ul>
+<li><code>publish-confirm-type</code>：开启publisher-confirm，这里支持两种类型：<ul>
+<li><code>simple</code>：同步等待confirm结果，直到超时</li>
+<li><code>correlated</code>：异步回调，定义ConfirmCallback，MQ返回结果时会回调这个ConfirmCallback</li>
+</ul>
+</li>
+<li><code>publish-returns</code>：开启publish-return功能，同样是基于callback机制，不过是定义ReturnCallback</li>
+<li><code>template.mandatory</code>：定义消息路由失败时的策略。true，则调用ReturnCallback；false：则直接丢弃消息</li>
+</ul>
+<h3 id="1-1-2-定义Return回调"><a href="#1-1-2-定义Return回调" class="headerlink" title="1.1.2.定义Return回调"></a>1.1.2.定义Return回调</h3><p>每个RabbitTemplate只能配置一个ReturnCallback，因此需要在项目加载时配置：</p>
+<p>修改publisher服务，添加一个：</p>
+<pre><code class="java">package cn.itcast.mq.config;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.BeansException;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationContextAware;
+import org.springframework.context.annotation.Configuration;
+
+@Slf4j
+@Configuration
+public class CommonConfig implements ApplicationContextAware &#123;
+    @Override
+    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException &#123;
+        // 获取RabbitTemplate
+        RabbitTemplate rabbitTemplate = applicationContext.getBean(RabbitTemplate.class);
+        // 设置ReturnCallback
+        rabbitTemplate.setReturnCallback((message, replyCode, replyText, exchange, routingKey) -&gt; &#123;
+            // 投递失败，记录日志
+            log.info(&quot;消息发送失败，应答码&#123;&#125;，原因&#123;&#125;，交换机&#123;&#125;，路由键&#123;&#125;,消息&#123;&#125;&quot;,
+                     replyCode, replyText, exchange, routingKey, message.toString());
+            // 如果有业务需要，可以重发消息
+        &#125;);
+    &#125;
+&#125;
+</code></pre>
+<h3 id="1-1-3-定义ConfirmCallback"><a href="#1-1-3-定义ConfirmCallback" class="headerlink" title="1.1.3.定义ConfirmCallback"></a>1.1.3.定义ConfirmCallback</h3><p>ConfirmCallback可以在发送消息时指定，因为每个业务处理confirm成功或失败的逻辑不一定相同。</p>
+<p>在publisher服务的cn.itcast.mq.spring.SpringAmqpTest类中，定义一个单元测试方法：</p>
+<pre><code class="java">public void testSendMessage2SimpleQueue() throws InterruptedException &#123;
+    String routingKey = &quot;simple&quot;;
+    // 1.消息体
+    String message = &quot;hello, spring amqp!&quot;;
+    // 2.全局唯一的消息ID，需要封装到CorrelationData中
+    CorrelationData correlationData = new CorrelationData(UUID.randomUUID().toString());
+    // 3.添加callback
+    correlationData.getFuture().addCallback(
+        result -&gt; &#123;
+            if(result.isAck())&#123;
+                // 3.1.ack，消息成功
+                log.debug(&quot;消息发送成功, ID:&#123;&#125;&quot;, correlationData.getId());
+            &#125;else&#123;
+                // 3.2.nack，消息失败
+                log.error(&quot;消息发送失败, ID:&#123;&#125;, 原因&#123;&#125;&quot;,correlationData.getId(), result.getReason());
+            &#125;
+        &#125;,
+        ex -&gt; log.error(&quot;消息发送异常, ID:&#123;&#125;, 原因&#123;&#125;&quot;,correlationData.getId(),ex.getMessage())
+    );
+    // 4.发送消息
+    rabbitTemplate.convertAndSend(&quot;amq.topic&quot;, routingKey, message, correlationData);
+    // 休眠一会儿，等待ack回执
+    Thread.sleep(2000);
+&#125;
+</code></pre>
+<h2 id="1-2-消息持久化"><a href="#1-2-消息持久化" class="headerlink" title="1.2.消息持久化"></a>1.2.消息持久化</h2><p>生产者确认可以确保消息投递到RabbitMQ的队列中，但是消息发送到RabbitMQ以后，如果突然宕机，也可能导致消息丢失。</p>
+<p>要想确保消息在RabbitMQ中安全保存，必须开启消息持久化机制。</p>
+<ul>
+<li>交换机持久化</li>
+<li>队列持久化</li>
+<li>消息持久化</li>
+</ul>
+<h3 id="1-2-1-交换机持久化"><a href="#1-2-1-交换机持久化" class="headerlink" title="1.2.1.交换机持久化"></a>1.2.1.交换机持久化</h3><p>RabbitMQ中交换机默认是非持久化的，mq重启后就丢失。</p>
+<p>SpringAMQP中可以通过代码指定交换机持久化：</p>
+<pre><code class="java">@Bean
+public DirectExchange simpleExchange()&#123;
+    // 三个参数：交换机名称、是否持久化、当没有queue与其绑定时是否自动删除
+    return new DirectExchange(&quot;simple.direct&quot;, true, false);
+&#125;
+</code></pre>
+<p>事实上，默认情况下，由SpringAMQP声明的交换机都是持久化的。</p>
+<p>可以在RabbitMQ控制台看到持久化的交换机都会带上<code>D</code>的标示：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day03-MQ高级\讲义\md\assets\image-20210718164412450.png" alt="image-20210718164412450"></p>
+<h3 id="1-2-2-队列持久化"><a href="#1-2-2-队列持久化" class="headerlink" title="1.2.2.队列持久化"></a>1.2.2.队列持久化</h3><p>RabbitMQ中队列默认是非持久化的，mq重启后就丢失。</p>
+<p>SpringAMQP中可以通过代码指定交换机持久化：</p>
+<pre><code class="java">@Bean
+public Queue simpleQueue()&#123;
+    // 使用QueueBuilder构建队列，durable就是持久化的
+    return QueueBuilder.durable(&quot;simple.queue&quot;).build();
+&#125;
+</code></pre>
+<p>事实上，默认情况下，由SpringAMQP声明的队列都是持久化的。</p>
+<p>可以在RabbitMQ控制台看到持久化的队列都会带上<code>D</code>的标示：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day03-MQ高级\讲义\md\assets\image-20210718164729543.png" alt="image-20210718164729543"></p>
+<h3 id="1-2-3-消息持久化"><a href="#1-2-3-消息持久化" class="headerlink" title="1.2.3.消息持久化"></a>1.2.3.消息持久化</h3><p>利用SpringAMQP发送消息时，可以设置消息的属性（MessageProperties），指定delivery-mode：</p>
+<ul>
+<li>1：非持久化</li>
+<li>2：持久化</li>
+</ul>
+<p>用java代码指定：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day03-MQ高级\讲义\md\assets\消息持久化.png" alt="image-20210718165100016"></p>
+<p>默认情况下，SpringAMQP发出的任何消息都是持久化的，不用特意指定。</p>
+<h2 id="1-3-消费者消息确认"><a href="#1-3-消费者消息确认" class="headerlink" title="1.3.消费者消息确认"></a>1.3.消费者消息确认</h2><p>RabbitMQ是<strong>阅后即焚</strong>机制，RabbitMQ确认消息被消费者消费后会立刻删除。</p>
+<p>而RabbitMQ是通过消费者回执来确认消费者是否成功处理消息的：消费者获取消息后，应该向RabbitMQ发送ACK回执，表明自己已经处理消息。</p>
+<p>设想这样的场景：</p>
+<ul>
+<li>1）RabbitMQ投递消息给消费者</li>
+<li>2）消费者获取消息后，返回ACK给RabbitMQ</li>
+<li>3）RabbitMQ删除消息</li>
+<li>4）消费者宕机，消息尚未处理</li>
+</ul>
+<p>这样，消息就丢失了。因此消费者返回ACK的时机非常重要。</p>
+<p>而SpringAMQP则允许配置三种确认模式：</p>
+<p>•<strong>manual</strong>：手动ack，需要在业务代码结束后，调用api发送ack。</p>
+<p>•<strong>auto</strong>：自动ack，由spring监测listener代码是否出现异常，没有异常则返回ack；抛出异常则返回nack</p>
+<p>•<strong>none</strong>：关闭ack，MQ假定消费者获取消息后会成功处理，因此消息投递后立即被删除</p>
+<p>由此可知：</p>
+<ul>
+<li>none模式下，消息投递是不可靠的，可能丢失</li>
+<li>auto模式类似事务机制，出现异常时返回nack，消息回滚到mq；没有异常，返回ack</li>
+<li>manual：自己根据业务情况，判断什么时候该ack</li>
+</ul>
+<p>一般，我们都是使用默认的auto即可。</p>
+<h3 id="1-3-1-演示none模式"><a href="#1-3-1-演示none模式" class="headerlink" title="1.3.1.演示none模式"></a>1.3.1.演示none模式</h3><p>修改consumer服务的application.yml文件，添加下面内容：</p>
+<pre><code class="yaml">spring:
+  rabbitmq:
+    listener:
+      simple:
+        acknowledge-mode: none # 关闭ack
+</code></pre>
+<p>修改consumer服务的SpringRabbitListener类中的方法，模拟一个消息处理异常：</p>
+<pre><code class="java">@RabbitListener(queues = &quot;simple.queue&quot;)
+public void listenSimpleQueue(String msg) &#123;
+    log.info(&quot;消费者接收到simple.queue的消息：【&#123;&#125;】&quot;, msg);
+    // 模拟异常
+    System.out.println(1 / 0);
+    log.debug(&quot;消息处理完成！&quot;);
+&#125;
+</code></pre>
+<p>测试可以发现，当消息处理抛异常时，消息依然被RabbitMQ删除了。</p>
+<h3 id="1-3-2-演示auto模式"><a href="#1-3-2-演示auto模式" class="headerlink" title="1.3.2.演示auto模式"></a>1.3.2.演示auto模式</h3><p>再次把确认机制修改为auto:</p>
+<pre><code class="yaml">spring:
+  rabbitmq:
+    listener:
+      simple:
+        acknowledge-mode: auto # 关闭ack
+</code></pre>
+<p>在异常位置打断点，再次发送消息，程序卡在断点时，可以发现此时消息状态为unack（未确定状态）：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day03-MQ高级\讲义\md\assets\image-20210718171705383.png" alt="image-20210718171705383"></p>
+<p>抛出异常后，因为Spring会自动返回nack，所以消息恢复至Ready状态，并且没有被RabbitMQ删除：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day03-MQ高级\讲义\md\assets\image-20210718171759179.png" alt="image-20210718171759179"></p>
+<h2 id="1-4-消费失败重试机制"><a href="#1-4-消费失败重试机制" class="headerlink" title="1.4.消费失败重试机制"></a>1.4.消费失败重试机制</h2><p>当消费者出现异常后，消息会不断requeue（重入队）到队列，再重新发送给消费者，然后再次异常，再次requeue，无限循环，导致mq的消息处理飙升，带来不必要的压力：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day03-MQ高级\讲义\md\assets\image-20210718172746378.png" alt="image-20210718172746378"></p>
+<p>怎么办呢？</p>
+<h3 id="1-4-1-本地重试"><a href="#1-4-1-本地重试" class="headerlink" title="1.4.1.本地重试"></a>1.4.1.本地重试</h3><p>我们可以利用Spring的retry机制，在消费者出现异常时利用本地重试，而不是无限制的requeue到mq队列。</p>
+<p>修改consumer服务的application.yml文件，添加内容：</p>
+<pre><code class="yaml">spring:
+  rabbitmq:
+    listener:
+      simple:
+        retry:
+          enabled: true # 开启消费者失败重试
+          initial-interval: 1000 # 初识的失败等待时长为1秒
+          multiplier: 2 # 失败的等待时长倍数，下次等待时长 = multiplier * last-interval
+          max-attempts: 3 # 最大重试次数
+          stateless: true # true无状态；false有状态。如果业务中包含事务，这里改为false
+</code></pre>
+<p>重启consumer服务，重复之前的测试。可以发现：</p>
+<ul>
+<li>在重试3次后，SpringAMQP会抛出异常AmqpRejectAndDontRequeueException，说明本地重试触发了</li>
+<li>查看RabbitMQ控制台，发现消息被删除了，说明最后SpringAMQP返回的是reject，mq删除消息了</li>
+</ul>
+<p>结论：</p>
+<ul>
+<li>开启本地重试时，消息处理过程中抛出异常，不会requeue到队列，而是在消费者本地重试</li>
+<li>重试达到最大次数后，Spring会返回reject，消息会被丢弃</li>
+</ul>
+<h3 id="1-4-2-重试次数耗尽策略"><a href="#1-4-2-重试次数耗尽策略" class="headerlink" title="1.4.2.重试次数耗尽策略"></a>1.4.2.重试次数耗尽策略</h3><p>在之前的测试中，达到最大重试次数后，消息会被丢弃，这是由Spring内部机制决定的。</p>
+<p>在开启重试模式后，重试次数耗尽，如果消息依然失败，则需要有MessageRecovery接口来处理，它包含三种不同的实现：</p>
+<ul>
+<li><p>RejectAndDontRequeueRecoverer：重试耗尽后，直接reject，丢弃消息。默认就是这种方式</p>
+</li>
+<li><p>ImmediateRequeueMessageRecoverer：重试耗尽后，返回nack，消息重新入队</p>
+</li>
+<li><p><strong>RepublishMessageRecoverer</strong>：重试耗尽后，将失败消息投递到指定的交换机</p>
+</li>
+</ul>
+<p>比较优雅的一种处理方案是RepublishMessageRecoverer，失败后将消息投递到一个指定的，专门存放异常消息的队列，后续由人工集中处理。</p>
+<p>1）在consumer服务中定义处理失败消息的交换机和队列</p>
+<pre><code class="java">@Bean
+public DirectExchange errorMessageExchange()&#123;
+    return new DirectExchange(&quot;error.direct&quot;);
+&#125;
+
+// Queue一定是core包里的 
+// import org.springframework.amqp.core.Queue;
+@Bean
+public Queue errorQueue()&#123;
+    return new Queue(&quot;error.queue&quot;, true);
+&#125;
+
+@Bean
+public Binding errorBinding(Queue errorQueue, DirectExchange errorMessageExchange)&#123;
+    return BindingBuilder.bind(errorQueue).to(errorMessageExchange).with(&quot;error&quot;);
+&#125;
+</code></pre>
+<p>2）定义一个RepublishMessageRecoverer，关联队列和交换机</p>
+<pre><code class="java">@Bean
+public MessageRecoverer republishMessageRecoverer(RabbitTemplate rabbitTemplate)&#123;
+    return new RepublishMessageRecoverer(rabbitTemplate, &quot;error.direct&quot;, &quot;error&quot;);
+&#125;
+</code></pre>
+<p>完整代码：</p>
+<pre><code class="java">package cn.itcast.mq.config;
+
+import org.springframework.amqp.core.Binding;
+import org.springframework.amqp.core.BindingBuilder;
+import org.springframework.amqp.core.DirectExchange;
+import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.rabbit.retry.MessageRecoverer;
+import org.springframework.amqp.rabbit.retry.RepublishMessageRecoverer;
+import org.springframework.context.annotation.Bean;
+
+@Configuration
+public class CommonConfig &#123;
+    
+    @Bean
+    public DirectExchange errorMessageExchange()&#123;
+        return new DirectExchange(&quot;error.direct&quot;);
+    &#125;
+    
+    @Bean
+    public Queue errorQueue()&#123;
+        return new Queue(&quot;error.queue&quot;, true);
+    &#125;
+    
+    @Bean
+    public Binding errorBinding(Queue errorQueue, DirectExchange errorMessageExchange)&#123;
+        return BindingBuilder.bind(errorQueue).to(errorMessageExchange).with(&quot;error&quot;);
+    &#125;
+
+    @Bean
+    public MessageRecoverer republishMessageRecoverer(RabbitTemplate rabbitTemplate)&#123;
+        return new RepublishMessageRecoverer(rabbitTemplate, &quot;error.direct&quot;, &quot;error&quot;);
+    &#125;
+&#125;
+</code></pre>
+<h2 id="1-5-总结"><a href="#1-5-总结" class="headerlink" title="1.5.总结"></a>1.5.总结</h2><p>如何确保RabbitMQ消息的可靠性？</p>
+<ul>
+<li>开启生产者确认机制，确保生产者的消息能到达队列</li>
+<li>开启持久化功能，确保消息未消费前在队列中不会丢失</li>
+<li>开启消费者确认机制为auto，由spring确认消息处理成功后完成ack</li>
+<li>开启消费者失败重试机制，并设置MessageRecoverer，多次重试失败后将消息投递到异常交换机路由到异常队列中保存，交由人工处理</li>
+</ul>
+<h1 id="2-死信交换机"><a href="#2-死信交换机" class="headerlink" title="2.死信交换机"></a>2.死信交换机</h1><h2 id="2-1-初识死信交换机"><a href="#2-1-初识死信交换机" class="headerlink" title="2.1.初识死信交换机"></a>2.1.初识死信交换机</h2><h3 id="2-1-1-什么是死信交换机"><a href="#2-1-1-什么是死信交换机" class="headerlink" title="2.1.1.什么是死信交换机"></a>2.1.1.什么是死信交换机</h3><p>什么是死信？</p>
+<p>当一个队列中的消息满足下列情况之一时，可以成为死信（dead letter）：</p>
+<ul>
+<li>消费者使用basic.reject或 basic.nack声明消费失败，并且消息的requeue参数设置为false</li>
+<li>消息是一个过期消息，超时无人消费</li>
+<li>要投递的队列消息满了，无法投递</li>
+</ul>
+<p>如果这个包含死信的队列配置了<code>dead-letter-exchange</code>属性，指定了一个交换机，那么队列中的死信就会投递到这个交换机中，而这个交换机称为<strong>死信交换机</strong>（Dead Letter Exchange，检查DLX）。</p>
+<p>如图，一个消息被消费者拒绝了，变成了死信：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day03-MQ高级\讲义\md\assets\image-20210718174328383.png" alt="image-20210718174328383"></p>
+<p>因为simple.queue绑定了死信交换机 dl.direct，因此死信会投递给这个交换机：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day03-MQ高级\讲义\md\assets\image-20210718174416160.png" alt="image-20210718174416160"></p>
+<p>如果这个死信交换机也绑定了一个队列，则消息最终会进入这个存放死信的队列：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day03-MQ高级\讲义\md\assets\image-20210718174506856.png" alt="image-20210718174506856"></p>
+<p>另外，队列将死信投递给死信交换机时，必须知道两个信息：</p>
+<ul>
+<li>死信交换机名称</li>
+<li>死信交换机与死信队列绑定的RoutingKey</li>
+</ul>
+<p>这样才能确保投递的消息能到达死信交换机，并且正确的路由到死信队列。</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day03-MQ高级\讲义\md\assets\image-20210821073801398.png" alt="image-20210821073801398"></p>
+<h3 id="2-1-2-总结"><a href="#2-1-2-总结" class="headerlink" title="2.1.2.总结"></a>2.1.2.总结</h3><p>什么样的消息会成为死信？</p>
+<ul>
+<li>消息被消费者reject或者返回nack</li>
+<li>消息超时未消费</li>
+<li>队列满了</li>
+</ul>
+<p>死信交换机的使用场景是什么？</p>
+<ul>
+<li>如果队列绑定了死信交换机，死信会投递到死信交换机；</li>
+<li>可以利用死信交换机收集所有消费者处理失败的消息（死信），交由人工处理，进一步提高消息队列的可靠性。</li>
+</ul>
+<h2 id="2-2-TTL"><a href="#2-2-TTL" class="headerlink" title="2.2.TTL"></a>2.2.TTL</h2><p>一个队列中的消息如果超时未消费，则会变为死信，超时分为两种情况：</p>
+<ul>
+<li>消息所在的队列设置了超时时间</li>
+<li>消息本身设置了超时时间</li>
+</ul>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day03-MQ高级\讲义\md\assets\ttl.png" alt="image-20210718182643311"></p>
+<h3 id="2-2-1-接收超时死信的死信交换机"><a href="#2-2-1-接收超时死信的死信交换机" class="headerlink" title="2.2.1.接收超时死信的死信交换机"></a>2.2.1.接收超时死信的死信交换机</h3><p>在consumer服务的SpringRabbitListener中，定义一个新的消费者，并且声明 死信交换机、死信队列：</p>
+<pre><code class="java">@RabbitListener(bindings = @QueueBinding(
+    value = @Queue(name = &quot;dl.queue&quot;, durable = &quot;true&quot;),
+    exchange = @Exchange(name = &quot;dl.direct&quot;),
+    key = &quot;dl&quot;
+))
+public void listenDlQueue(String msg)&#123;
+    log.info(&quot;接收到 dl.queue的延迟消息：&#123;&#125;&quot;, msg);
+&#125;
+</code></pre>
+<h3 id="2-2-2-声明一个队列，并且指定TTL"><a href="#2-2-2-声明一个队列，并且指定TTL" class="headerlink" title="2.2.2.声明一个队列，并且指定TTL"></a>2.2.2.声明一个队列，并且指定TTL</h3><p>要给队列设置超时时间，需要在声明队列时配置x-message-ttl属性：</p>
+<pre><code class="java">@Bean
+public Queue ttlQueue()&#123;
+    return QueueBuilder.durable(&quot;ttl.queue&quot;) // 指定队列名称，并持久化
+        .ttl(10000) // 设置队列的超时时间，10秒
+        .deadLetterExchange(&quot;dl.direct&quot;) // 指定死信交换机
+        .deadLetterRoutingKey(&quot;dl&quot;)
+        .build();
+&#125;
+</code></pre>
+<p>注意，这个队列设定了死信交换机为<code>dl.direct</code></p>
+<p>声明交换机，将ttl与交换机绑定：</p>
+<pre><code class="java">@Bean
+public DirectExchange ttlExchange()&#123;
+    return new DirectExchange(&quot;ttl.direct&quot;);
+&#125;
+
+@Bean
+public Binding ttlBinding(Queue ttlQueue,DirectExchange ttlExchange)&#123;
+    return BindingBuilder.bind(ttlQueue).to(ttlExchange).with(&quot;ttl&quot;);
+&#125;
+</code></pre>
+<p>发送消息，但是不要指定TTL：</p>
+<pre><code class="java">@Test
+public void testTTLMsg() &#123;
+    // 创建消息
+    String message = &quot;hello, ttl queue&quot;;
+    // 发送消息
+    rabbitTemplate.convertAndSend(&quot;ttl.direct&quot;, &quot;ttl&quot;, message);
+    // 记录日志
+    log.debug(&quot;发送消息成功&quot;);
+&#125;
+</code></pre>
+<p>发送消息的日志：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day03-MQ高级\讲义\md\assets\image-20210718191657478.png" alt="image-20210718191657478"></p>
+<p>查看下接收消息的日志：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day03-MQ高级\讲义\md\assets\image-20210718191738706.png" alt="image-20210718191738706"></p>
+<p>因为队列的TTL值是10000ms，也就是10秒。可以看到消息发送与接收之间的时差刚好是10秒。</p>
+<h3 id="2-2-3-发送消息时，设定TTL"><a href="#2-2-3-发送消息时，设定TTL" class="headerlink" title="2.2.3.发送消息时，设定TTL"></a>2.2.3.发送消息时，设定TTL</h3><p>在发送消息时，也可以指定TTL：</p>
+<pre><code class="java">@Test
+public void testTTLMsg() &#123;
+    // 创建消息
+    Message message = MessageBuilder
+        .withBody(&quot;hello, ttl message&quot;.getBytes(StandardCharsets.UTF_8))
+        .setExpiration(&quot;5000&quot;)
+        .build();
+    // 发送消息
+    rabbitTemplate.convertAndSend(&quot;ttl.direct&quot;, &quot;ttl&quot;, message);
+    log.debug(&quot;发送消息成功&quot;);
+&#125;
+</code></pre>
+<p>查看发送消息日志：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day03-MQ高级\讲义\md\assets\image-20210718191939140.png" alt="image-20210718191939140"></p>
+<p>接收消息日志：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day03-MQ高级\讲义\md\assets\image-20210718192004662.png" alt="image-20210718192004662"></p>
+<p>这次，发送与接收的延迟只有5秒。说明当队列、消息都设置了TTL时，任意一个到期就会成为死信。</p>
+<h3 id="2-2-4-总结"><a href="#2-2-4-总结" class="headerlink" title="2.2.4.总结"></a>2.2.4.总结</h3><p>消息超时的两种方式是？</p>
+<ul>
+<li>给队列设置ttl属性，进入队列后超过ttl时间的消息变为死信</li>
+<li>给消息设置ttl属性，队列接收到消息超过ttl时间后变为死信</li>
+</ul>
+<p>如何实现发送一个消息20秒后消费者才收到消息？</p>
+<ul>
+<li>给消息的目标队列指定死信交换机</li>
+<li>将消费者监听的队列绑定到死信交换机</li>
+<li>发送消息时给消息设置超时时间为20秒</li>
+</ul>
+<h1 id="3-消息积压"><a href="#3-消息积压" class="headerlink" title="3.消息积压"></a>3.消息积压</h1><h2 id="3-1-消息堆积问题"><a href="#3-1-消息堆积问题" class="headerlink" title="3.1.消息堆积问题"></a>3.1.消息堆积问题</h2><p>当生产者发送消息的速度超过了消费者处理消息的速度，就会导致队列中的消息堆积，直到队列存储消息达到上限。之后发送的消息就会成为死信，可能会被丢弃，这就是消息堆积问题。</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day03-MQ高级\讲义\md\assets\image-20210718194040498.png" alt="image-20210718194040498"></p>
+<p>解决消息堆积有两种思路：</p>
+<ul>
+<li>增加更多消费者，提高消费速度。也就是我们之前说的work queue模式</li>
+<li>在消费者内开启线程池加快消息处理速度</li>
+<li>扩大队列容积，提高堆积上限</li>
+</ul>
+<p>要提升队列容积，把消息保存在内存中显然是不行的。</p>
+<h1 id="4-MQ集群"><a href="#4-MQ集群" class="headerlink" title="4.MQ集群"></a>4.MQ集群</h1><h2 id="4-1-集群分类"><a href="#4-1-集群分类" class="headerlink" title="4.1.集群分类"></a>4.1.集群分类</h2><p>RabbitMQ的是基于Erlang语言编写，而Erlang又是一个面向并发的语言，天然支持集群模式。RabbitMQ的集群有两种模式：</p>
+<p>• <strong>普通集群</strong>：是一种分布式集群，将队列分散到集群的各个节点，从而提高整个集群的并发能力。</p>
+<p>• <strong>镜像集群</strong>：是一种主从集群，普通集群的基础上，添加了主从备份功能，提高集群的数据可用性。</p>
+<h2 id="4-2-普通集群"><a href="#4-2-普通集群" class="headerlink" title="4.2.普通集群"></a>4.2.普通集群</h2><h3 id="4-2-1-集群结构和特征"><a href="#4-2-1-集群结构和特征" class="headerlink" title="4.2.1.集群结构和特征"></a>4.2.1.集群结构和特征</h3><p>普通集群，或者叫标准集群（classic cluster），具备下列特征：</p>
+<ul>
+<li>会在集群的各个节点间共享部分数据，包括：交换机、队列元信息。不包含队列中的消息。</li>
+<li>当访问集群某节点时，如果队列不在该节点，会从数据所在节点传递到当前节点并返回</li>
+<li>队列所在节点宕机，队列中的消息就会丢失</li>
+</ul>
+<p>结构如图：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day03-MQ高级\讲义\md\assets\image-20210718220843323.png" alt="image-20210718220843323"></p>
+<h3 id="4-2-2-部署"><a href="#4-2-2-部署" class="headerlink" title="4.2.2.部署"></a>4.2.2.部署</h3><p>参考课前资料：《RabbitMQ部署指南.md》</p>
+<h2 id="4-3-镜像集群"><a href="#4-3-镜像集群" class="headerlink" title="4.3.镜像集群"></a>4.3.镜像集群</h2><h3 id="4-3-1-集群结构和特征"><a href="#4-3-1-集群结构和特征" class="headerlink" title="4.3.1.集群结构和特征"></a>4.3.1.集群结构和特征</h3><p>镜像集群：本质是主从模式，具备下面的特征：</p>
+<ul>
+<li>交换机、队列、队列中的消息会在各个mq的镜像节点之间同步备份。</li>
+<li>创建队列的节点被称为该队列的<strong>主节点，</strong>备份到的其它节点叫做该队列的<strong>镜像</strong>节点。</li>
+<li>一个队列的主节点可能是另一个队列的镜像节点</li>
+<li>所有操作都是主节点完成，然后同步给镜像节点</li>
+<li>主宕机后，镜像节点会替代成新的主</li>
+</ul>
+<p>结构如图：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day03-MQ高级\讲义\md\assets\image-20210718221039542.png" alt="image-20210718221039542"></p>
+<h3 id="4-3-2-部署-1"><a href="#4-3-2-部署-1" class="headerlink" title="4.3.2.部署"></a>4.3.2.部署</h3><p>参考课前资料：《RabbitMQ部署指南.md》</p>
+<h3 id="4-4-3-SpringAMQP连接MQ镜像集群"><a href="#4-4-3-SpringAMQP连接MQ镜像集群" class="headerlink" title="4.4.3.SpringAMQP连接MQ镜像集群"></a>4.4.3.SpringAMQP连接MQ镜像集群</h3><p>注意，这里用address来代替host、port方式</p>
+<pre><code class="java">spring:
+  rabbitmq:
+    addresses: 192.168.150.105:8071, 192.168.150.105:8072, 192.168.150.105:8073
+    username: itcast
+    password: 123321
+    virtual-host: /
+</code></pre>
 <hr>
 <h1 id="Redis集群"><a href="#Redis集群" class="headerlink" title="Redis集群"></a>Redis集群</h1><p>本章是基于CentOS7下的Redis集群教程，包括：</p>
 <ul>
@@ -3447,7 +3944,433 @@ public LettuceClientConfigurationBuilderCustomizer clientConfigurationBuilderCus
         - 192.168.150.101:8002
         - 192.168.150.101:8003
 </code></pre>
+<h6 id="事务是一组数据库的增删改查的操作"><a href="#事务是一组数据库的增删改查的操作" class="headerlink" title="事务是一组数据库的增删改查的操作"></a>事务是一组数据库的增删改查的操作</h6><h1 id="分布式事务"><a href="#分布式事务" class="headerlink" title="分布式事务"></a>分布式事务</h1><h2 id="1-分布式事务问题"><a href="#1-分布式事务问题" class="headerlink" title="1.分布式事务问题"></a>1.分布式事务问题</h2><h3 id="1-1-本地事务"><a href="#1-1-本地事务" class="headerlink" title="1.1.本地事务"></a>1.1.本地事务</h3><p>本地事务，也就是传统的<strong>单机事务</strong>。在传统数据库事务中，必须要满足四个原则：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\image-20210724165045186.png" alt="image-20210724165045186"></p>
+<h2 id="1-2-分布式事务"><a href="#1-2-分布式事务" class="headerlink" title="1.2.分布式事务"></a>1.2.分布式事务</h2><p><strong>分布式事务</strong>，就是指不是在单个服务或单个数据库架构下，产生的事务，例如：</p>
+<ul>
+<li>跨数据源的分布式事务</li>
+<li>跨服务的分布式事务</li>
+<li>综合情况</li>
+</ul>
+<p>在数据库水平拆分、服务垂直拆分之后，一个业务操作通常要跨多个数据库、服务才能完成。例如电商行业中比较常见的下单付款案例，包括下面几个行为：</p>
+<ul>
+<li>创建新订单</li>
+<li>扣减商品库存</li>
+<li>从用户账户余额扣除金额</li>
+</ul>
+<p>完成上面的操作需要访问三个不同的微服务和三个不同的数据库。</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\image-20210724165338958.png" alt="image-20210724165338958"></p>
+<p>订单的创建、库存的扣减、账户扣款在每一个服务和数据库内是一个本地事务，可以保证ACID原则。</p>
+<p>但是当我们把三件事情看做一个”业务”，要满足保证“业务”的原子性，要么所有操作全部成功，要么全部失败，不允许出现部分成功部分失败的现象，这就是<strong>分布式系统下的事务</strong>了。</p>
+<p>此时ACID难以满足，这是分布式事务要解决的问题</p>
+<h2 id="1-3-演示分布式事务问题"><a href="#1-3-演示分布式事务问题" class="headerlink" title="1.3.演示分布式事务问题"></a>1.3.演示分布式事务问题</h2><p>我们通过一个案例来演示分布式事务的问题：</p>
+<p>1）<strong>创建数据库，名为seata_demo，然后导入课前资料提供的SQL文件：</strong></p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\image-20210724165634571.png" alt="image-20210724165634571"> </p>
+<p>2）<strong>导入课前资料提供的微服务：</strong></p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\image-20210724165709994.png" alt="image-20210724165709994"> </p>
+<p>微服务结构如下：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\image-20210724165729273.png" alt="image-20210724165729273"> </p>
+<p>其中：</p>
+<p>seata-demo：父工程，负责管理项目依赖</p>
+<ul>
+<li>account-service：账户服务，负责管理用户的资金账户。提供扣减余额的接口</li>
+<li>storage-service：库存服务，负责管理商品库存。提供扣减库存的接口</li>
+<li>order-service：订单服务，负责管理订单。创建订单时，需要调用account-service和storage-service</li>
+</ul>
+<p><strong>3）启动nacos、所有微服务</strong></p>
+<h1 id="2-理论基础"><a href="#2-理论基础" class="headerlink" title="2.理论基础"></a>2.理论基础</h1><p>解决分布式事务问题，需要一些分布式系统的基础知识作为理论指导。</p>
+<h2 id="2-1-CAP定理"><a href="#2-1-CAP定理" class="headerlink" title="2.1.CAP定理"></a>2.1.CAP定理</h2><p>1998年，加州大学的计算机科学家 Eric Brewer 提出，分布式系统有三个指标。</p>
+<blockquote>
+<ul>
+<li>Consistency（一致性）</li>
+<li>Availability（可用性）</li>
+<li>Partition tolerance （分区容错性）</li>
+</ul>
+</blockquote>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\image-20210724170517944.png" alt="image-20210724170517944"></p>
+<p>它们的第一个字母分别是 C、A、P。</p>
+<p>Eric Brewer 说，这三个指标不可能同时做到。这个结论就叫做 CAP 定理。</p>
+<pre><code class="java">根据CAP定理，分布式系统在设计时只能满足以下三个中的两个：
+&gt; - Consistency（一致性）
+&gt; - Availability（可用性）
+&gt; - Partition tolerance （分区容错性）
 
+    
+CA（Consistency + Availability）：
+适用场景：当系统需要强一致性和高可用性时，通常是在没有网络分区或者网络分区很少发生的情况下，例如传统的数据库系统。
+何时使用：在金融系统、在线事务处理（OLTP）等对数据一致性要求极高的场景。
+    
+CP（Consistency + Partition tolerance）：
+适用场景：当系统需要在网络分区发生时仍然保持数据一致性时，通常牺牲可用性。
+何时使用：在分布式数据库、数据存储系统（如Bigtable、HBase、MongoDB）等，这些系统在网络分区时可能会拒绝写入操作，以保证数据的一致性。
+    
+AP（Availability + Partition tolerance）：
+适用场景：当系统需要在网络分区发生时仍然可用，通常牺牲一致性。
+何时使用：在许多分布式缓存系统（如Amazon Dynamo、Cassandra、Redis）、消息队列（如Kafka）等，这些系统在网络分区时可能会返回旧数据或者近似数据，以保证系统的可用性。
+在实际应用中，根据不同的业务需求和系统特点，选择合适的CAP权衡：
+
+CA系统：通常用于单数据中心或者网络环境非常可靠的情况，不适用于大规模分布式系统。
+CP系统：适合那些对数据一致性要求高的场景，如银行系统，可以接受在极端情况下系统不可用。
+AP系统：适合那些对可用性要求高的场景，如社交网络、实时分析系统，可以接受在一定时间内数据是近似一致的。
+
+---------------------------------------------------------------------------
+BASE理论是对CAP的一种解决思路，包含三个思想：
+Basically Available （基本可用）：分布式系统在出现故障时，允许损失部分可用性，即保证核心可用。
+Soft State（软状态）：在一定时间内，允许出现中间状态，比如临时的不一致状态。
+Eventually Consistent（最终一致性）：虽然无法保证强一致性，但是在软状态结束后，最终达到数据一致。
+
+
+分布式事务最大的问题是各个子事务的一致性问题，因此可以借鉴CAP定理和BASE理论：
+AP模式：各子事务分别执行和提交，允许出现结果不一致，然后采用弥补措施恢复数据即可，实现最终一致。
+CP模式：各个子事务执行后互相等待，同时提交，同时回滚，达成强一致。但事务等待过程中，处于弱可用状态。
+</code></pre>
+<h3 id="2-1-1-一致性"><a href="#2-1-1-一致性" class="headerlink" title="2.1.1.一致性"></a>2.1.1.一致性</h3><p>Consistency（一致性）：用户访问分布式系统中的任意节点，得到的数据必须一致。</p>
+<p>比如现在包含两个节点，其中的初始数据是一致的：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\image-20210724170704694.png" alt="image-20210724170704694"></p>
+<p>当我们修改其中一个节点的数据时，两者的数据产生了差异：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\image-20210724170735847.png" alt="image-20210724170735847"></p>
+<p>要想保住一致性，就必须实现node01 到 node02的数据 同步：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\image-20210724170834855.png" alt="image-20210724170834855"></p>
+<h3 id="2-1-2-可用性"><a href="#2-1-2-可用性" class="headerlink" title="2.1.2.可用性"></a>2.1.2.可用性</h3><p>Availability （可用性）：用户访问集群中的任意健康节点，必须能得到响应，而不是超时或拒绝。</p>
+<p>如图，有三个节点的集群，访问任何一个都可以及时得到响应：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\image-20210724170932072.png" alt="image-20210724170932072"></p>
+<p>当有部分节点因为网络故障或其它原因无法访问时，代表节点不可用：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\image-20210724171007516.png" alt="image-20210724171007516"></p>
+<h3 id="2-1-3-分区容错"><a href="#2-1-3-分区容错" class="headerlink" title="2.1.3.分区容错"></a>2.1.3.分区容错</h3><p><strong>Partition（分区）</strong>：因为网络故障或其它原因导致分布式系统中的部分节点与其它节点失去连接，形成独立分区。</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\image-20210724171041210.png" alt="image-20210724171041210"></p>
+<p><strong>Tolerance（容错）</strong>：在集群出现分区时，整个系统也要持续对外提供服务</p>
+<h3 id="2-1-4-矛盾"><a href="#2-1-4-矛盾" class="headerlink" title="2.1.4.矛盾"></a>2.1.4.矛盾</h3><p>在分布式系统中，系统间的网络不能100%保证健康，一定会有故障的时候，而服务有必须对外保证服务。因此Partition Tolerance不可避免。</p>
+<p>当节点接收到新的数据变更时，就会出现问题了：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\image-20210724171546472.png" alt="image-20210724171546472"></p>
+<p>如果此时要保证<strong>一致性</strong>，就必须等待网络恢复，完成数据同步后，整个集群才对外提供服务，服务处于阻塞状态，不可用。</p>
+<p>如果此时要保证<strong>可用性</strong>，就不能等待网络恢复，那node01、node02与node03之间就会出现数据不一致。</p>
+<p>也就是说，在P一定会出现的情况下，A和C之间只能实现一个。</p>
+<h2 id="2-2-BASE理论"><a href="#2-2-BASE理论" class="headerlink" title="2.2.BASE理论"></a>2.2.BASE理论</h2><p>BASE理论是对CAP的一种解决思路，包含三个思想：</p>
+<ul>
+<li><strong>Basically Available</strong> <strong>（基本可用）</strong>：分布式系统在出现故障时，允许损失部分可用性，即保证核心可用。</li>
+<li><strong>Soft State（软状态）：</strong>在一定时间内，允许出现中间状态，比如临时的不一致状态。</li>
+<li><strong>Eventually Consistent（最终一致性）</strong>：虽然无法保证强一致性，但是在软状态结束后，最终达到数据一致。</li>
+</ul>
+<h2 id="2-3-解决分布式事务的思路"><a href="#2-3-解决分布式事务的思路" class="headerlink" title="2.3.解决分布式事务的思路"></a>2.3.解决分布式事务的思路</h2><p>分布式事务最大的问题是各个子事务的一致性问题，因此可以借鉴CAP定理和BASE理论，有两种解决思路：</p>
+<ul>
+<li><p>AP模式：各子事务分别执行和提交，允许出现结果不一致，然后采用弥补措施恢复数据即可，实现最终一致。</p>
+</li>
+<li><p>CP模式：各个子事务执行后互相等待，同时提交，同时回滚，达成强一致。但事务等待过程中，处于弱可用状态。</p>
+</li>
+</ul>
+<p>但不管是哪一种模式，都需要在子系统事务之间互相通讯，协调事务状态，也就是需要一个**事务协调者(TC)**：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\image-20210724172123567.png" alt="image-20210724172123567"></p>
+<p>这里的子系统事务，称为<strong>分支事务</strong>；有关联的各个分支事务在一起称为<strong>全局事务</strong>。</p>
+<h1 id="3-初识Seata"><a href="#3-初识Seata" class="headerlink" title="3.初识Seata"></a>3.初识Seata</h1><p>Seata是 2019 年 1 月份蚂蚁金服和阿里巴巴共同开源的分布式事务解决方案。致力于提供高性能和简单易用的分布式事务服务，为用户打造一站式的分布式解决方案。</p>
+<p>官网地址：<a target="_blank" rel="noopener" href="http://seata.io/%EF%BC%8C%E5%85%B6%E4%B8%AD%E7%9A%84%E6%96%87%E6%A1%A3%E3%80%81%E6%92%AD%E5%AE%A2%E4%B8%AD%E6%8F%90%E4%BE%9B%E4%BA%86%E5%A4%A7%E9%87%8F%E7%9A%84%E4%BD%BF%E7%94%A8%E8%AF%B4%E6%98%8E%E3%80%81%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90%E3%80%82">http://seata.io/，其中的文档、播客中提供了大量的使用说明、源码分析。</a></p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\image-20210724172225817.png" alt="image-20210724172225817"></p>
+<h2 id="3-1-Seata的架构"><a href="#3-1-Seata的架构" class="headerlink" title="3.1.Seata的架构"></a>3.1.Seata的架构</h2><p>Seata事务管理中有三个重要的角色：</p>
+<ul>
+<li><p><strong>TC (Transaction Coordinator) -</strong> <strong>事务协调者：</strong>维护全局和分支事务的状态，协调全局事务提交或回滚。</p>
+</li>
+<li><p><strong>TM (Transaction Manager) -</strong> <strong>事务管理器：</strong>定义全局事务的范围、开始全局事务、提交或回滚全局事务。</p>
+</li>
+<li><p><strong>RM (Resource Manager) -</strong> <strong>资源管理器：</strong>管理分支事务处理的资源，与TC交谈以注册分支事务和报告分支事务的状态，并驱动分支事务提交或回滚。</p>
+</li>
+</ul>
+<p>整体的架构如图：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\image-20210724172326452.png" alt="image-20210724172326452"></p>
+<p>Seata基于上述架构提供了四种不同的分布式事务解决方案：</p>
+<ul>
+<li>XA模式：强一致性分阶段事务模式，牺牲了一定的可用性，无业务侵入</li>
+<li>TCC模式：最终一致的分阶段事务模式，有业务侵入</li>
+<li>AT模式：最终一致的分阶段事务模式，无业务侵入，也是Seata的默认模式</li>
+<li>SAGA模式：长事务模式，有业务侵入</li>
+</ul>
+<p>无论哪种方案，都离不开TC，也就是事务的协调者。</p>
+<h2 id="3-2-部署TC服务"><a href="#3-2-部署TC服务" class="headerlink" title="3.2.部署TC服务"></a>3.2.部署TC服务</h2><p>参考课前资料提供的文档《 seata的部署和集成.md 》：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\image-20210724172549013.png" alt="image-20210724172549013"></p>
+<h1 id="seata的部署和集成"><a href="#seata的部署和集成" class="headerlink" title="seata的部署和集成"></a>seata的部署和集成</h1><h1 id="一、部署Seata的tc-server"><a href="#一、部署Seata的tc-server" class="headerlink" title="一、部署Seata的tc-server"></a>一、部署Seata的tc-server</h1><h2 id="1-准备"><a href="#1-准备" class="headerlink" title="1.准备"></a>1.准备</h2><p>资料文件夹准备好软件包了：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\资料\assets\tc.png" alt="image-20210622202357640"></p>
+<h2 id="2-修改配置"><a href="#2-修改配置" class="headerlink" title="2.修改配置"></a>2.修改配置</h2><p>修改conf目录下的registry.conf文件：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\资料\assets\image-20210622202622874.png" alt="image-20210622202622874"></p>
+<p>内容如下：</p>
+<pre><code class="properties">registry &#123;
+  # tc服务的注册中心类，这里选择nacos，也可以是eureka、zookeeper等
+  type = &quot;nacos&quot;
+
+  nacos &#123;
+    # seata tc 服务注册到 nacos的服务名称，可以自定义
+    application = &quot;seata-tc-server&quot;
+    serverAddr = &quot;127.0.0.1:8848&quot;
+    group = &quot;DEFAULT_GROUP&quot;
+    namespace = &quot;&quot;
+    cluster = &quot;SH&quot;
+    username = &quot;nacos&quot;
+    password = &quot;nacos&quot;
+  &#125;
+&#125;
+
+config &#123;
+  # 读取tc服务端的配置文件的方式，这里是从nacos配置中心读取，这样如果tc是集群，可以共享配置
+  type = &quot;nacos&quot;
+  # 配置nacos地址等信息
+  nacos &#123;
+    serverAddr = &quot;127.0.0.1:8848&quot;
+    namespace = &quot;&quot;
+    group = &quot;DEFAULT_GROUP&quot;
+    username = &quot;nacos&quot;
+    password = &quot;nacos&quot;
+    dataId = &quot;seataServer.properties&quot;
+  &#125;
+&#125;
+</code></pre>
+<p>要在cmd里面用：<code>startup.cmd -m standalone</code>：单机启动！！！</p>
+<h2 id="3-在nacos添加配置"><a href="#3-在nacos添加配置" class="headerlink" title="3.在nacos添加配置"></a>3.在nacos添加配置</h2><p>特别注意，为了让tc服务的集群可以共享配置，我们选择了nacos作为统一配置中心。因此服务端配置文件seataServer.properties文件需要在nacos中配好。</p>
+<p>格式如下：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\资料\assets\image-20210622203609227.png" alt="image-20210622203609227"></p>
+<p>配置内容如下：</p>
+<pre><code class="properties"># 数据存储方式，db代表数据库
+store.mode=db
+store.db.datasource=druid
+store.db.dbType=mysql
+store.db.driverClassName=com.mysql.cj.jdbc.Driver
+store.db.url=jdbc:mysql://127.0.0.1:3306/seata?useUnicode=true&amp;rewriteBatchedStatements=true&amp;serverTimezone=GMT
+store.db.user=root
+store.db.password=1234
+store.db.minConn=5
+store.db.maxConn=30
+store.db.globalTable=global_table
+store.db.branchTable=branch_table
+store.db.queryLimit=100
+store.db.lockTable=lock_table
+store.db.maxWait=5000
+# 事务、日志等配置
+server.recovery.committingRetryPeriod=1000
+server.recovery.asynCommittingRetryPeriod=1000
+server.recovery.rollbackingRetryPeriod=1000
+server.recovery.timeoutRetryPeriod=1000
+server.maxCommitRetryTimeout=-1
+server.maxRollbackRetryTimeout=-1
+server.rollbackRetryTimeoutUnlockEnable=false
+server.undo.logSaveDays=7
+server.undo.logDeletePeriod=86400000
+
+# 客户端与服务端传输方式
+transport.serialization=seata
+transport.compressor=none
+# 关闭metrics功能，提高性能
+metrics.enabled=false
+metrics.registryType=compact
+metrics.exporterList=prometheus
+metrics.exporterPrometheusPort=9898
+</code></pre>
+<p>&#x3D;&#x3D;其中的数据库地址、用户名、密码都需要修改成你自己的数据库信息。&#x3D;&#x3D;</p>
+<h2 id="4-创建数据库表"><a href="#4-创建数据库表" class="headerlink" title="4.创建数据库表"></a>4.创建数据库表</h2><p>特别注意：tc服务在管理分布式事务时，需要记录事务相关数据到数据库中，你需要提前创建好这些表。</p>
+<p>新建一个名为seata的数据库，运行课前资料提供的sql文件：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\资料\assets\image-20210622204145159.png" alt="image-20210622204145159"></p>
+<h2 id="5-启动TC服务"><a href="#5-启动TC服务" class="headerlink" title="5.启动TC服务"></a>5.启动TC服务</h2><p>进入bin目录，使用管理员身份运行其中的seata-server.bat即可：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\资料\assets\image-20210622205427318.png" alt="image-20210622205427318"></p>
+<p>启动成功后，seata-server应该已经注册到nacos注册中心了。</p>
+<p>打开浏览器，访问nacos地址：<a href="http://localhost:8848，然后进入服务列表页面，可以看到seata-tc-server的信息：">http://localhost:8848，然后进入服务列表页面，可以看到seata-tc-server的信息：</a></p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\资料\assets\image-20210622205901450.png" alt="image-20210622205901450"></p>
+<p><span style = "color:red">闪退的情况一定一定要看环境变量的java version <strong>一定要20以下 最好用11</strong></span></p>
+<h2 id="3-3-微服务集成Seata"><a href="#3-3-微服务集成Seata" class="headerlink" title="3.3.微服务集成Seata"></a>3.3.微服务集成Seata</h2><h3 id="3-3-1-引入依赖"><a href="#3-3-1-引入依赖" class="headerlink" title="3.3.1.引入依赖"></a>3.3.1.引入依赖</h3><p>首先，在seata-demo父工程的pom.xml中引入依赖（因为考虑到所有微服务都需要集成seata）：</p>
+<pre><code class="xml">&lt;!--seata--&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;com.alibaba.cloud&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-cloud-starter-alibaba-seata&lt;/artifactId&gt;
+    &lt;exclusions&gt;
+        &lt;!--版本较低，1.3.0，因此排除--&gt; 
+        &lt;exclusion&gt;
+            &lt;artifactId&gt;seata-spring-boot-starter&lt;/artifactId&gt;
+            &lt;groupId&gt;io.seata&lt;/groupId&gt;
+        &lt;/exclusion&gt;
+    &lt;/exclusions&gt;
+&lt;/dependency&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;io.seata&lt;/groupId&gt;
+    &lt;artifactId&gt;seata-spring-boot-starter&lt;/artifactId&gt;
+    &lt;!--seata starter 采用1.4.2版本--&gt;
+    &lt;version&gt;$&#123;seata.version&#125;&lt;/version&gt;
+&lt;/dependency&gt;
+</code></pre>
+<h3 id="3-3-2-配置TC地址"><a href="#3-3-2-配置TC地址" class="headerlink" title="3.3.2.配置TC地址"></a>3.3.2.配置TC地址</h3><p>以order-service为例，在application.yml中，配置TC服务信息，通过注册中心nacos，结合服务名称获取TC地址：</p>
+<pre><code class="yaml">seata:
+  registry: # TC服务注册中心的配置，微服务根据这些信息去注册中心获取tc服务地址
+    type: nacos # 注册中心类型 nacos
+    nacos:
+      server-addr: 127.0.0.1:8848 # nacos地址
+      namespace: &quot;&quot; # namespace，默认为空
+      group: DEFAULT_GROUP # 分组，默认是DEFAULT_GROUP
+      application: seata-tc-server # seata服务名称
+      username: nacos
+      password: nacos
+  tx-service-group: seata-demo # 事务组名称
+  service:
+    vgroup-mapping: # 事务组与cluster的映射关系
+      seata-demo: SH
+</code></pre>
+<p>微服务如何根据这些配置寻找TC的地址呢？</p>
+<p>我们知道注册到Nacos中的微服务，确定一个具体实例需要四个信息：</p>
+<ul>
+<li>namespace：命名空间</li>
+<li>group：分组</li>
+<li>application：服务名</li>
+<li>cluster：集群名</li>
+</ul>
+<p>以上四个信息，在刚才的yml文件中都能找到：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\image-20210724173654258.png" alt="image-20210724173654258"></p>
+<p>namespace为空，就是默认的public</p>
+<p>结合起来，TC服务的信息就是：public@DEFAULT_GROUP@seata-tc-server@SH，这样就能确定TC服务集群了。然后就可以去Nacos拉取对应的实例信息了。</p>
+<h3 id="3-3-3-其它服务"><a href="#3-3-3-其它服务" class="headerlink" title="3.3.3.其它服务"></a>3.3.3.其它服务</h3><p>其它两个微服务也都参考order-service的配置来做，完全一样。</p>
+<h1 id="4-动手实践"><a href="#4-动手实践" class="headerlink" title="4.动手实践"></a>4.动手实践</h1><p>下面我们就一起学习下Seata中的三种不同的事务模式。</p>
+<h2 id="4-1-XA模式"><a href="#4-1-XA模式" class="headerlink" title="4.1.XA模式"></a>4.1.XA模式</h2><h3 id="4-1-1-两阶段提交"><a href="#4-1-1-两阶段提交" class="headerlink" title="4.1.1.两阶段提交"></a>4.1.1.两阶段提交</h3><p>XA模式其实底层是支持一种XA协议，目前主流数据库都实现了这种协议，实现的原理都是基于两阶段提交。</p>
+<p>正常情况：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\image-20210724174102768.png" alt="image-20210724174102768"></p>
+<p>异常情况：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\image-20210724174234987.png" alt="image-20210724174234987"></p>
+<p>一阶段：</p>
+<ul>
+<li>事务协调者通知每个事物参与者执行本地事务</li>
+<li>本地事务执行完成后报告事务执行状态给事务协调者，此时事务不提交，继续持有数据库锁</li>
+</ul>
+<p>二阶段：</p>
+<ul>
+<li>事务协调者基于一阶段的报告来判断下一步操作<ul>
+<li>如果一阶段都成功，则通知所有事务参与者，提交事务</li>
+<li>如果一阶段任意一个参与者失败，则通知所有事务参与者回滚事务</li>
+</ul>
+</li>
+</ul>
+<h3 id="4-1-2-Seata的XA模型"><a href="#4-1-2-Seata的XA模型" class="headerlink" title="4.1.2.Seata的XA模型"></a>4.1.2.Seata的XA模型</h3><p>Seata对原始的XA模式做了简单的封装和改造，以适应自己的事务模型，基本架构如图：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\image-20210724174424070.png" alt="image-20210724174424070"></p>
+<p>RM一阶段的工作：</p>
+<p>​    ① 注册分支事务到TC</p>
+<p>​    ② 执行分支业务sql但不提交</p>
+<p>​    ③ 报告执行状态到TC</p>
+<p>TC二阶段的工作：</p>
+<ul>
+<li><p>TC检测各分支事务执行状态</p>
+<p>a.如果都成功，通知所有RM提交事务</p>
+<p>b.如果有失败，通知所有RM回滚事务</p>
+</li>
+</ul>
+<p>RM二阶段的工作：</p>
+<ul>
+<li>接收TC指令，提交或回滚事务</li>
+</ul>
+<h3 id="4-1-3-实现XA模式"><a href="#4-1-3-实现XA模式" class="headerlink" title="4.1.3.实现XA模式"></a>4.1.3.实现XA模式</h3><p>Seata的starter已经完成了XA模式的自动装配，实现非常简单，步骤如下：</p>
+<p>1）修改application.yml文件（每个参与事务的微服务），开启XA模式：</p>
+<pre><code class="yaml">seata:
+  data-source-proxy-mode: XA
+</code></pre>
+<p>2）给发起全局事务的入口方法添加@GlobalTransactional注解:</p>
+<p>本例中是OrderServiceImpl中的create方法.</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\image-20210724174859556.png" alt="image-20210724174859556"></p>
+<p>3）重启服务并测试</p>
+<p>重启order-service，再次测试，发现无论怎样，三个微服务都能成功回滚。</p>
+<h3 id="4-1-4-优缺点"><a href="#4-1-4-优缺点" class="headerlink" title="4.1.4.优缺点"></a>4.1.4.优缺点</h3><p>XA模式的优点是什么？</p>
+<ul>
+<li>事务的强一致性，满足ACID原则。</li>
+<li>常用数据库都支持，实现简单，并且没有代码侵入</li>
+</ul>
+<p>XA模式的缺点是什么？</p>
+<ul>
+<li>因为一阶段需要锁定资源，等待二阶段结束才释放，性能较差</li>
+<li>依赖关系型数据库实现事务</li>
+</ul>
+<h2 id="4-2-AT模式"><a href="#4-2-AT模式" class="headerlink" title="4.2.AT模式"></a>4.2.AT模式</h2><p>AT模式同样是分阶段提交的事务模型，不过缺弥补了XA模型中资源锁定周期过长的缺陷。</p>
+<h3 id="4-2-1-Seata的AT模型"><a href="#4-2-1-Seata的AT模型" class="headerlink" title="4.2.1.Seata的AT模型"></a>4.2.1.Seata的AT模型</h3><p>基本流程图：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\at.png" alt="image-20210724175327511"></p>
+<p>阶段一RM的工作：</p>
+<ul>
+<li>注册分支事务</li>
+<li>记录undo-log（数据快照）</li>
+<li>执行业务sql并提交</li>
+<li>报告事务状态</li>
+</ul>
+<p>阶段二提交时RM的工作：</p>
+<ul>
+<li>删除undo-log即可</li>
+</ul>
+<p>阶段二回滚时RM的工作：</p>
+<ul>
+<li>根据undo-log恢复数据到更新前</li>
+</ul>
+<h3 id="4-2-2-流程梳理"><a href="#4-2-2-流程梳理" class="headerlink" title="4.2.2.流程梳理"></a>4.2.2.流程梳理</h3><p>我们用一个真实的业务来梳理下AT模式的原理。</p>
+<p>比如，现在又一个数据库表，记录用户余额：</p>
+<table>
+<thead>
+<tr>
+<th><strong>id</strong></th>
+<th><strong>money</strong></th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>100</td>
+</tr>
+</tbody></table>
+<p>其中一个分支业务要执行的SQL为：</p>
+<pre><code class="sql">update tb_account set money = money - 10 where id = 1
+</code></pre>
+<p>AT模式下，当前分支事务执行流程如下：</p>
+<p>一阶段：</p>
+<p>1）TM发起并注册全局事务到TC</p>
+<p>2）TM调用分支事务</p>
+<p>3）分支事务准备执行业务SQL</p>
+<p>4）RM拦截业务SQL，根据where条件查询原始数据，形成快照。</p>
+<pre><code class="json">&#123;
+    &quot;id&quot;: 1, &quot;money&quot;: 100
+&#125;
+</code></pre>
+<p>5）RM执行业务SQL，提交本地事务，释放数据库锁。此时 <code>money = 90</code></p>
+<p>6）RM报告本地事务状态给TC</p>
+<p>二阶段：</p>
+<p>1）TM通知TC事务结束</p>
+<p>2）TC检查分支事务状态</p>
+<p>​     a）如果都成功，则立即删除快照</p>
+<p>​     b）如果有分支事务失败，需要回滚。读取快照数据（<code>&#123;&quot;id&quot;: 1, &quot;money&quot;: 100&#125;</code>），将快照恢复到数据库。此时数据库再次恢复为100</p>
+<p>流程图：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\image-20210724180722921.png" alt="image-20210724180722921"></p>
+<h3 id="4-2-3-AT与XA的区别"><a href="#4-2-3-AT与XA的区别" class="headerlink" title="4.2.3.AT与XA的区别"></a>4.2.3.AT与XA的区别</h3><p>简述AT模式与XA模式最大的区别是什么？</p>
+<ul>
+<li>XA模式一阶段不提交事务，锁定资源；AT模式一阶段直接提交，不锁定资源。</li>
+<li>XA模式依赖数据库机制实现回滚；AT模式利用数据快照实现数据回滚。</li>
+<li>XA模式强一致；AT模式最终一致</li>
+</ul>
+<h3 id="4-2-4-脏写问题"><a href="#4-2-4-脏写问题" class="headerlink" title="4.2.4.脏写问题"></a>4.2.4.脏写问题</h3><p>在多线程并发访问AT模式的分布式事务时，有可能出现脏写问题，如图：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\image-20210724181541234.png" alt="image-20210724181541234"></p>
+<p>解决思路就是引入了全局锁的概念。在释放DB锁之前，先拿到全局锁。避免同一时刻有另外一个事务来操作当前数据。</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\at原理.png" alt="image-20210724181843029"></p>
+<h3 id="4-2-5-实现AT模式"><a href="#4-2-5-实现AT模式" class="headerlink" title="4.2.5.实现AT模式"></a>4.2.5.实现AT模式</h3><p>AT模式中的快照生成、回滚等动作都是由框架自动完成，没有任何代码侵入，因此实现非常简单。</p>
+<p>只不过，AT模式需要一个表来记录全局锁、另一张表来记录数据快照undo_log。</p>
+<p>1）导入数据库表，记录全局锁</p>
+<p>导入课前资料提供的Sql文件：seata-at.sql，其中lock_table导入到TC服务关联的数据库，undo_log表导入到微服务关联的数据库：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\image-20210724182217272.png" alt="image-20210724182217272"></p>
+<p>2）修改application.yml文件，将事务模式修改为AT模式即可：</p>
+<pre><code class="yaml">seata:
+  data-source-proxy-mode: AT # 默认就是AT
+</code></pre>
+<p>3）重启服务并测试</p>
+<h3 id="4-2-6-优缺点"><a href="#4-2-6-优缺点" class="headerlink" title="4.2.6.优缺点"></a>4.2.6.优缺点</h3><p>AT模式的优点：</p>
+<ul>
+<li>一阶段完成直接提交事务，释放资源，性能比较好</li>
+<li>利用全局锁实现读写隔离</li>
+<li>没有代码侵入，框架自动完成回滚和提交</li>
+</ul>
+<p>AT模式的缺点：</p>
+<ul>
+<li>两阶段之间属于软状态，属于最终一致</li>
+<li>框架的快照功能会影响性能，但比XA模式要好很多</li>
+</ul>
+<h2 id="4-3-两种模式对比"><a href="#4-3-两种模式对比" class="headerlink" title="4.3.两种模式对比"></a>4.3.两种模式对比</h2><p>我们从以下几个方面来对比四种实现：</p>
+<ul>
+<li>一致性：能否保证事务的一致性？强一致还是最终一致？</li>
+<li>隔离性：事务之间的隔离性如何？</li>
+<li>代码侵入：是否需要对业务代码改造？</li>
+<li>性能：有无性能损耗？</li>
+<li>场景：常见的业务场景</li>
+</ul>
+<p>如图：</p>
+<p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\senior\day02-分布式事务\讲义\md\assets\对比.png" alt="image-20210724185021819"></p>
+<h3 id=""><a href="#" class="headerlink" title=""></a></h3>
             
         </div>
     </div>
@@ -3461,7 +4384,7 @@ public LettuceClientConfigurationBuilderCustomizer clientConfigurationBuilderCus
         
         <span class="tag">
             
-            <a href="/tags/HM" style=color:#1bccbc>
+            <a href="/tags/HM" style=color:#879cff>
                 HM
             </a>
         </span>
@@ -4149,7 +5072,7 @@ POST /heima/_update/1
         
         <span class="tag">
             
-            <a href="/tags/后端" style=color:#ffa2c4>
+            <a href="/tags/后端" style=color:#1bccbc>
                 后端
             </a>
         </span>
@@ -7414,7 +8337,7 @@ public class LoginDto &#123;
         
         <span class="tag">
             
-            <a href="/tags/HM" style=color:#ffa2c4>
+            <a href="/tags/HM" style=color:#ff7d73>
                 HM
             </a>
         </span>
@@ -17151,7 +18074,7 @@ http &#123;
         
         <span class="tag">
             
-            <a href="/tags/HM" style=color:#00bcd4>
+            <a href="/tags/HM" style=color:#1bccbc>
                 HM
             </a>
         </span>
@@ -19877,7 +20800,7 @@ function getRegionInfo(row) &#123;
         
         <span class="tag">
             
-            <a href="/tags/后端" style=color:#ff7d73>
+            <a href="/tags/后端" style=color:#ffa2c4>
                 后端
             </a>
         </span>

@@ -1,0 +1,650 @@
+
+<!DOCTYPE html>
+<html lang="zh_CH ">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P-luminary || Redis</title>
+    <meta name="author" content="Asuna">
+    <meta name="description" content=" ">
+    <meta name="keywords" content=" ">
+    <link rel="icon" href="/https://raw.githubusercontent.com/P-luminary/images/master/data/asuna.jpg">
+    <link rel="stylesheet" href="/css/antd.min.css">
+    
+    <link rel="stylesheet" href="/css/maiden-theme.css">
+    
+    <script src="/js/vue.js"></script>
+    <script src="/js/antd.min.js"></script>
+<meta name="generator" content="Hexo 6.1.0"></head>
+
+<body>
+
+    <div id="loading"
+        style="height: 100vh; width: 100%; position: fixed;display: flex;z-index: 200; justify-content: space-between;">
+        <div id="loadleft" style="width: 50%;background-color: #ffffff;transition: width 0.6s ease-out;"></div>
+        <div id="loadright" style="width: 50%;background-color: #ffffff;transition: width 0.6s ease-out;"></div>
+        <div
+            style="position: fixed; height: 100vh; width: 100%;display: flex;justify-content: center;align-items: center;">
+            <div id="loadcontent"
+                style="width:400px;height:400px;padding:50px;border-radius:50%;display:flex;justify-content:center;align-items:center;border:solid 10px#a3ddfb; text-align:center;opacity:1;transition:opacity 0.3s ease-out;">
+                <div>
+                    <h2>LOADING...</h2>
+                    <p>加载过慢请开启缓存(浏览器默认开启)</p>
+                    <div>
+                        <img src="/dancingkitty.gif" alt="loading">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="layout">
+        <transition name="into">
+            <div v-show="show_page" style="display: none;">
+                <div id="menu_show">
+                     
+<nav id="menu">
+    <div class="desktop-menu">
+        <a href="/">
+            <span class="title">P-luminary</span>
+        </a>
+        
+        <a href="/">
+            <span>
+                <a-icon type="home" theme="filled" />
+            </span>
+            <span>home</span>
+        </a>
+        
+        <a href="/tags/语法">
+            <span>
+                <a-icon type="tags" theme="filled" />
+            </span>
+            <span>tags</span>
+        </a>
+        
+    </div>
+
+    <div :class="'phone-menu ' + menu_show" id="phone-menu">
+        <div :class="'title'" @click="menu_show=!menu_show">
+            <span style="margin-right: 10px;">
+                <a-icon type="appstore" theme="filled" />
+            </span>
+            <span>P-luminary</span>
+        </div>
+        <div class="items" v-show="menu_show">
+            
+            <a href="/">
+                <div class="item">
+                    <div style="min-width:20px; max-width:50px; width: 10%">
+                        <a-icon type="home" theme="filled" />
+                    </div>
+                    <div style="min-width:100px;max-width: 150%;width: 20%;">home</div>
+                </div>
+            </a>
+            
+            <a href="/tags/语法">
+                <div class="item">
+                    <div style="min-width:20px; max-width:50px; width: 10%">
+                        <a-icon type="tags" theme="filled" />
+                    </div>
+                    <div style="min-width:100px;max-width: 150%;width: 20%;">tags</div>
+                </div>
+            </a>
+            
+        </div>
+        <div class="curtain" v-show="menu_show"></div>
+    </div>
+
+</nav>
+                </div>
+
+                <div id="main">
+                     
+<link rel="stylesheet" href="/css/post-body.css">
+<div class="article">
+    <div>
+        <h1>Redis </h1>
+    </div>
+    <div class="info">
+        <span class="date">
+            <span class="icon">
+                <a-icon type="calendar" theme="filled" />
+            </span>
+            2025/1/15
+        </span>
+
+        
+
+        
+
+        <span class="tags">
+            <span class="icon">
+                <a-icon type="tags" theme="filled" />
+            </span>
+            
+            <span class="tag">
+                
+                <a href="/tags/后端" style=color:#00bcd4>
+                    后端
+                </a>
+            </span>
+            
+        </span>
+        
+    </div>
+
+    <div class="content" v-pre>
+        <h2 id="黑马点评Redis"><a href="#黑马点评Redis" class="headerlink" title="黑马点评Redis"></a>黑马点评Redis</h2><p><img src="https://raw.githubusercontent.com/P-luminary/images/88713189f951d8ab6d78aec97873de573d169d7b/Redis%E5%AE%9E%E6%88%98%E7%AF%87.png"></p>
+<h3 id="实现短信的登录和注册"><a href="#实现短信的登录和注册" class="headerlink" title="实现短信的登录和注册"></a>实现短信的登录和注册</h3><pre><code class="java">com/hmdp/controller/UserController.java
+package com.hmdp.controller;
+
+
+import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.RandomUtil;
+import com.hmdp.dto.LoginFormDTO;
+import com.hmdp.dto.Result;
+import com.hmdp.dto.UserDTO;
+import com.hmdp.entity.User;
+import com.hmdp.entity.UserInfo;
+import com.hmdp.service.IUserInfoService;
+import com.hmdp.service.IUserService;
+import com.hmdp.utils.RegexUtils;
+import com.hmdp.utils.SystemConstants;
+import com.hmdp.utils.UserHolder;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.*;
+
+import javax.annotation.Resource;
+import javax.servlet.http.HttpSession;
+
+import static com.baomidou.mybatisplus.core.toolkit.Wrappers.lambdaQuery;
+import static com.baomidou.mybatisplus.core.toolkit.Wrappers.query;
+
+
+/**
+ * &lt;p&gt;
+ * 前端控制器
+ * &lt;/p&gt;
+ *
+ * @author 虎哥
+ * @since 2021-12-22
+ */
+@Slf4j
+@RestController
+@RequestMapping(&quot;/user&quot;)
+public class UserController &#123;
+
+    @Resource
+    private IUserService userService;
+
+    @Resource
+    private IUserInfoService userInfoService;
+
+    /**
+     * 发送手机验证码
+     */
+    @PostMapping(&quot;code&quot;)
+    public Result sendCode(@RequestParam(&quot;phone&quot;) String phone, HttpSession session) &#123;
+        return userService.sendCode(phone, session);
+    &#125;
+
+    /**
+     * 登录功能
+     * @param loginForm 登录参数，包含手机号、验证码；或者手机号、密码
+     */
+    @PostMapping(&quot;/login&quot;)
+    public Result login(@RequestBody LoginFormDTO loginForm, HttpSession session)&#123;
+        String phone = loginForm.getPhone();
+        // 校验手机号
+        if (RegexUtils.isPhoneInvalid(phone)) &#123;
+            return Result.fail(&quot;手机号格式错误！&quot;);
+        &#125;
+        // 校验验证码
+        Object cacheCode = session.getAttribute(&quot;code&quot;);
+        String code = loginForm.getCode();
+
+        // 不一致 报错
+        if (cacheCode == null || !code.equals(cacheCode)) &#123;
+            return Result.fail(&quot;验证码错误&quot;);
+        &#125;
+
+        // 一致 根据手机号查询用户 用mybatisplus
+        User user = userService.getOne(lambdaQuery(User.class).eq(User::getPhone, phone));
+        // 判断用户是否存在
+        if (ObjectUtil.isEmpty(user)) &#123;
+            // 不存在 创建新用户保存
+            user = new User();
+            user.setPhone(phone);
+            user.setNickName(SystemConstants.USER_NICK_NAME_PREFIX + RandomUtil.randomString(10));
+            userService.save(user);
+        &#125;
+        // 存在 保存用户信息到session当中
+        UserDTO userDTO = new UserDTO();
+        userDTO.setId(user.getId());
+        userDTO.setNickName(user.getNickName());
+        userDTO.setPhone(user.getPhone());
+        session.setAttribute(&quot;user&quot;, userDTO); // 确保保存的是 UserDTO 对象
+        return Result.ok();
+    &#125;
+
+    /**
+     * 登出功能
+     * @return 无
+     */
+    @PostMapping(&quot;/logout&quot;)
+    public Result logout()&#123;
+        // TODO 实现登出功能
+        return Result.fail(&quot;功能未完成&quot;);
+    &#125;
+
+    @GetMapping(&quot;/me&quot;)
+    public Result me()&#123;
+        // TODO 获取当前登录的用户并返回
+        UserDTO user = UserHolder.getUser();
+        return Result.ok(user);
+    &#125;
+
+    @GetMapping(&quot;/info/&#123;id&#125;&quot;)
+    public Result info(@PathVariable(&quot;id&quot;) Long userId)&#123;
+        // 查询详情
+        UserInfo info = userInfoService.getById(userId);
+        if (info == null) &#123;
+            // 没有详情，应该是第一次查看详情
+            return Result.ok();
+        &#125;
+        info.setCreateTime(null);
+        info.setUpdateTime(null);
+        // 返回
+        return Result.ok(info);
+    &#125;
+&#125;
+</code></pre>
+<pre><code class="java">com/hmdp/service/impl/UserServiceImpl.java
+package com.hmdp.service.impl;
+
+import cn.hutool.core.util.RandomUtil;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.hmdp.dto.LoginFormDTO;
+import com.hmdp.dto.Result;
+import com.hmdp.entity.User;
+import com.hmdp.mapper.UserMapper;
+import com.hmdp.service.IUserService;
+import com.hmdp.utils.RegexUtils;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import javax.servlet.http.HttpSession;
+
+/**
+ * &lt;p&gt;
+ * 服务实现类
+ * &lt;/p&gt;
+ *
+ * @author 虎哥
+ * @since 2021-12-22
+ */
+@Service
+@Slf4j
+public class UserServiceImpl extends ServiceImpl&lt;UserMapper, User&gt; implements IUserService &#123;
+
+    @Override
+    public Result sendCode(String phone, HttpSession session) &#123;
+        // 校验手机号
+        if (RegexUtils.isPhoneInvalid(phone)) &#123;
+            // 不符合 返回错误信息
+            return Result.fail(&quot;手机号格式错误！&quot;);
+        &#125;
+        // 符合 生成验证码
+        String code = RandomUtil.randomNumbers(6);
+        // 保存验证码到session
+        session.setAttribute(&quot;code&quot;, code);
+        // 发送验证码
+        log.debug(&quot;发送短信验证码成功，验证码：&#123;&#125;&quot;, code);
+        // 返回ok
+        return Result.ok();
+    &#125;
+
+    @Override
+    public Result login(LoginFormDTO loginForm, HttpSession session) &#123;
+        return null;
+    &#125;
+&#125;
+</code></pre>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/85fe36afc83beb58573eae44931fe1ed0934d272/Session+%E9%AA%8C%E8%AF%81%E7%A0%81.png"></p>
+<h3 id="实现登录校验拦截器"><a href="#实现登录校验拦截器" class="headerlink" title="实现登录校验拦截器"></a>实现登录校验拦截器</h3><pre><code class="java">package com.hmdp.config;
+
+import com.hmdp.utils.LoginInterceptor;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+@Configuration
+public class MvcConfig implements WebMvcConfigurer &#123;
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) &#123;
+        registry.addInterceptor(new LoginInterceptor())
+                .excludePathPatterns(
+                        &quot;/user/code&quot;,
+                        &quot;/user/login&quot;
+                );
+    &#125;
+&#125;
+</code></pre>
+<pre><code class="java">package com.hmdp.utils;
+
+import com.hmdp.dto.UserDTO;
+
+public class UserHolder &#123;
+    private static final ThreadLocal&lt;UserDTO&gt; tl = new ThreadLocal&lt;&gt;();
+
+    public static void saveUser(UserDTO user)&#123;
+        tl.set(user);
+    &#125;
+
+    public static UserDTO getUser()&#123;
+        return tl.get();
+    &#125;
+
+    public static void removeUser()&#123;
+        tl.remove();
+    &#125;
+&#125;
+</code></pre>
+<pre><code class="java">package com.hmdp.utils;
+
+import cn.hutool.core.util.ObjectUtil;
+import com.hmdp.dto.UserDTO;
+import org.springframework.web.servlet.HandlerInterceptor;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
+
+public class LoginInterceptor implements HandlerInterceptor &#123;
+    @Override
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception &#123;
+        // 获取session
+        HttpSession session = request.getSession();
+        // 获取session中的用户
+        Object user = session.getAttribute(&quot;user&quot;);
+        // 判断用户是否存在
+        if (ObjectUtil.isEmpty(user)) &#123;
+            // 不存在，拦截
+            response.setStatus(401);
+            return false;
+        &#125;
+        // 存在，保存用户信息到ThreadLocal
+        UserDTO userDTO = (UserDTO) user; // 确保 user 已经是 UserDTO 类型
+        UserHolder.saveUser(userDTO);
+        // 放行
+        return true;
+    &#125;
+
+    @Override
+    public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) throws Exception &#123;
+        // 移除用户
+        UserHolder.removeUser();
+    &#125;
+&#125;
+</code></pre>
+<h4 id="集群的Session共享问题"><a href="#集群的Session共享问题" class="headerlink" title="集群的Session共享问题"></a>集群的Session共享问题</h4><p>session共享问题：多台Tomcat并不共享session存储空间，当请求切换到不同tomcat服务时导致数据丢失的问题。</p>
+<p>session的替代方案应该满足：数据共享、内存存储、key、value结构</p>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/5b6d076e24d4cda9ea106bd713ee11a92fe7572c/Redis%E4%BB%A3%E6%9B%BFSession.png"></p>
+<p>发送短信验证码后生成的验证码 <strong>保存验证码到Redis</strong> → 以手机号作为Key存储验证码 → 发送验证码</p>
+<pre><code class="java">com/hmdp/controller/UserController.java
+package com.hmdp.controller;
+
+
+import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.bean.copier.CopyOptions;
+import cn.hutool.core.lang.UUID;
+import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.RandomUtil;
+import com.hmdp.dto.LoginFormDTO;
+import com.hmdp.dto.Result;
+import com.hmdp.dto.UserDTO;
+import com.hmdp.entity.User;
+import com.hmdp.entity.UserInfo;
+import com.hmdp.service.IUserInfoService;
+import com.hmdp.service.IUserService;
+import com.hmdp.utils.RegexUtils;
+import com.hmdp.utils.SystemConstants;
+import com.hmdp.utils.UserHolder;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.web.bind.annotation.*;
+
+import javax.annotation.Resource;
+import javax.servlet.http.HttpSession;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+import static com.baomidou.mybatisplus.core.toolkit.Wrappers.lambdaQuery;
+import static com.baomidou.mybatisplus.core.toolkit.Wrappers.query;
+
+
+/**
+ * &lt;p&gt;
+ * 前端控制器
+ * &lt;/p&gt;
+ *
+ * @author 虎哥
+ * @since 2021-12-22
+ */
+@Slf4j
+@RestController
+@RequestMapping(&quot;/user&quot;)
+public class UserController &#123;
+
+    @Resource
+    private IUserService userService;
+
+    @Resource
+    private IUserInfoService userInfoService;
+
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
+
+
+    /**
+     * 发送手机验证码
+     */
+    @PostMapping(&quot;code&quot;)
+    public Result sendCode(@RequestParam(&quot;phone&quot;) String phone, HttpSession session) &#123;
+        return userService.sendCode(phone, session);
+    &#125;
+
+    /**
+     * 登录功能
+     * @param loginForm 登录参数，包含手机号、验证码；或者手机号、密码
+     */
+    @PostMapping(&quot;/login&quot;)
+    public Result login(@RequestBody LoginFormDTO loginForm, HttpSession session)&#123;
+        String phone = loginForm.getPhone();
+        // 校验手机号
+        if (RegexUtils.isPhoneInvalid(phone)) &#123;
+            return Result.fail(&quot;手机号格式错误！&quot;);
+        &#125;
+        // 校验验证码
+//        Object cacheCode = session.getAttribute(&quot;code&quot;);
+        // 从Redis中获取验证码并校验
+        String cacheCode = stringRedisTemplate.opsForValue().get(SystemConstants.LOGIN_CODE_KEY + phone);
+        String code = loginForm.getCode();
+
+        // 不一致 报错
+        if (cacheCode == null || !code.equals(cacheCode)) &#123;
+            return Result.fail(&quot;验证码错误&quot;);
+        &#125;
+
+        // 存储
+
+        // 一致 根据手机号查询用户 用mybatisplus
+        User user = userService.getOne(lambdaQuery(User.class).eq(User::getPhone, phone));
+        // 判断用户是否存在
+        if (ObjectUtil.isEmpty(user)) &#123;
+            // 不存在 创建新用户保存
+            user = new User();
+            user.setPhone(phone);
+            user.setNickName(SystemConstants.USER_NICK_NAME_PREFIX + RandomUtil.randomString(10));
+            userService.save(user);
+        &#125;
+        // 保存用户信息到redis中
+        // 随机生成token，作为登录令牌
+        String token = UUID.randomUUID().toString(true);
+        // 将User对象转换为Hash存储
+        UserDTO userDTO = BeanUtil.copyProperties(user, UserDTO.class);
+        // 存储  用了putall 要把userDto转map
+        Map&lt;String, Object&gt; userMap = BeanUtil.beanToMap(userDTO, new HashMap&lt;&gt;(),
+                CopyOptions.create()
+                        .setIgnoreNullValue(true)
+                        .setFieldValueEditor((fieldName, fieldValue) -&gt; fieldValue.toString()));
+        // 存储   因为存的时候不能设置有效期 要存完以后再去设置有效期
+        String tokenKey = SystemConstants.LOGIN_CODE_TOKEN + token;
+        stringRedisTemplate.opsForHash().putAll(tokenKey, userMap);
+        // 设置token有效期 30min
+        stringRedisTemplate.expire(tokenKey, SystemConstants.REDIS_TIMEOUT, TimeUnit.MINUTES);
+        // 但是我要如果状态在 就不断更新token的有效期 【更新token有效期】
+
+
+
+        // 存在 保存用户信息到session当中
+//        UserDTO userDTO = new UserDTO();
+//        userDTO.setId(user.getId());
+//        userDTO.setNickName(user.getNickName());
+//        userDTO.setPhone(user.getPhone());
+        // 确保保存的是 UserDTO 对象
+        session.setAttribute(&quot;user&quot;, BeanUtil.copyProperties(user, UserDTO.class));
+        return Result.ok();
+    &#125;
+
+    /**
+     * 登出功能
+     * @return 无
+     */
+    @PostMapping(&quot;/logout&quot;)
+    public Result logout()&#123;
+        // TODO 实现登出功能
+        return Result.fail(&quot;功能未完成&quot;);
+    &#125;
+
+    @GetMapping(&quot;/me&quot;)
+    public Result me()&#123;
+        // TODO 获取当前登录的用户并返回
+        // userService.login(loginForm, session)
+        UserDTO user = UserHolder.getUser();
+        return Result.ok(user);
+    &#125;
+
+    @GetMapping(&quot;/info/&#123;id&#125;&quot;)
+    public Result info(@PathVariable(&quot;id&quot;) Long userId)&#123;
+        // 查询详情
+        UserInfo info = userInfoService.getById(userId);
+        if (info == null) &#123;
+            // 没有详情，应该是第一次查看详情
+            return Result.ok();
+        &#125;
+        info.setCreateTime(null);
+        info.setUpdateTime(null);
+        // 返回
+        return Result.ok(info);
+    &#125;
+&#125;
+</code></pre>
+
+    </div>
+
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gitalk@1/dist/gitalk.css">
+    <div id="comment">
+        <div id="gitalk-container">
+        </div>
+    </div>
+    
+</div>
+                     
+<footer id="footer">
+    <div class="footer-wrap">
+        <div>
+            © 2018 - 2025 P-luminary
+            <span class="footer-icon">
+                <a-icon type="flag" theme="filled" /></span>
+            @Asuna
+        </div>
+        <div></div>
+        <div>Based on the <a target="_blank" rel="noopener" href="https://hexo.io/">Hexo Engine</a>
+<!--         & <a target="_blank" rel="noopener" href="https://github.com/korilin/hexo-theme-particle">Particle Theme</a></div> -->
+        
+    </div>
+
+</footer>
+
+<script src="/js/highlight.min.js"></script>
+<script src="/js/particle.js"></script>
+                </div>
+            </div>
+        </transition>
+    </div>
+
+    <script>
+    new Vue({
+        el: "#layout",
+        data: {
+            show_page: false,
+            onload_menu: false,
+            menu_show: false,
+            card_top: 100
+        },
+        created: function () {
+            var that = this
+            window.onload = function () {
+                that.show_page = true
+                document.getElementById("loadcontent").style.opacity = 0
+                setTimeout(function () {
+                    document.getElementById("loadleft").style.width = 0
+                    document.getElementById("loadright").style.width = 0
+                }, 300)
+                setTimeout(function () {
+                    document.getElementById("loading").style = "display:none"
+                }, 600)
+            }
+        },
+        mounted: function () {
+            var that = this
+            window.addEventListener('scroll', function (e) {
+                that.menu_show = false
+            })
+        },
+        methods: {
+            home_click: function () {
+                window.scrollTo({
+                    top: window.innerHeight - 80,
+                    behavior: "smooth",
+                });
+            }
+        }
+    })
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/gitalk@1/dist/gitalk.min.js"></script>
+<script>
+    const gitalk = new Gitalk({
+        clientID: '',
+        clientSecret: '',
+        repo: 'hexo-theme-particle',      // The repository of store comments,
+        owner: 'P-luminary',
+        admin: ['P-luminary'],
+        language: 'en',
+        id: location.pathname,      // Ensure uniqueness and length less than 50
+        distractionFreeMode: true  // Facebook-like distraction free mode
+    })
+    gitalk.render('gitalk-container')
+</script>
+
+</body>
+
+</html>

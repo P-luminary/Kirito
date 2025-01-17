@@ -465,7 +465,7 @@ docker logs -f es
   ]
 &#125;
 </code></pre>
-<h2 id="3-3-扩展词词典"><a href="#3-3-扩展词词典" class="headerlink" title="3.3 扩展词词典"></a>3.3 扩展词词典</h2><p>随着互联网的发展，“造词运动”也越发的频繁。出现了很多新的词语，在原有的词汇列表中并不存在。比如：“奥力给”，“传智播客” 等。</p>
+<h2 id="3-3-扩展词词典"><a href="#3-3-扩展词词典" class="headerlink" title="3.3 扩展词词典"></a>3.3 扩展词词典</h2><h5 id="注意当前文件的编码必须是-UTF-8-格式，严禁使用Windows记事本编辑，可以直接linux系统vi编辑"><a href="#注意当前文件的编码必须是-UTF-8-格式，严禁使用Windows记事本编辑，可以直接linux系统vi编辑" class="headerlink" title="注意当前文件的编码必须是 UTF-8 格式，严禁使用Windows记事本编辑，可以直接linux系统vi编辑"></a><span style = "color:red">注意当前文件的编码必须是 UTF-8 格式，严禁使用Windows记事本编辑，可以直接linux系统vi编辑</span></h5><p>随着互联网的发展，“造词运动”也越发的频繁。出现了很多新的词语，在原有的词汇列表中并不存在。比如：“奥力给”，“传智播客” 等。</p>
 <p>所以我们的词汇也需要不断的更新，IK分词器提供了扩展词汇的功能。</p>
 <p>1）打开IK分词器config目录：<code>/var/lib/docker/volumes/es-plugins/_data/ik/config/IKAnalyzer.cfg.xml</code></p>
 <p><img src="E:\广州黑马JavaEE就业198期—洪哥\微服务\es\day1-es\资料\assets\image-20210506112225508.png" alt="image-20210506112225508"></p>
@@ -474,8 +474,7 @@ docker logs -f es
 &lt;!DOCTYPE properties SYSTEM &quot;http://java.sun.com/dtd/properties.dtd&quot;&gt;
 &lt;properties&gt;
         &lt;comment&gt;IK Analyzer 扩展配置&lt;/comment&gt;
-        &lt;!--用户可以在这里配置自己的扩展字典 *** 添加扩展词典--&gt;
-        &lt;!-- ext.dic没有 需要自己新建 然后再进去加入扩展词典 --&gt;
+      
         &lt;entry key=&quot;ext_dict&quot;&gt;ext.dic&lt;/entry&gt; 
 &lt;/properties&gt;
 </code></pre>

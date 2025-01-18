@@ -126,7 +126,7 @@
             
             <span class="tag">
                 
-                <a href="/tags/后端" style=color:#00bcd4>
+                <a href="/tags/后端" style=color:#1bccbc>
                     后端
                 </a>
             </span>
@@ -555,6 +555,311 @@ public class UserController &#123;
     &#125;
 &#125;
 </code></pre>
+<h4 id="解决状态登录刷新的问题【双重拦截器】"><a href="#解决状态登录刷新的问题【双重拦截器】" class="headerlink" title="解决状态登录刷新的问题【双重拦截器】"></a>解决状态登录刷新的问题【双重拦截器】</h4><p>请求 → <strong>拦截器①</strong>(拦截一切路径)[<u>流程：获取token、查询Redis用户、保存到ThreadLocal、刷新Token有效期、放行</u>] → <strong>拦截器②</strong>(拦截需要登录的路径)[查询ThreadLocal的用户, 不存在则拦截、存在则继续]</p>
+<pre><code class="java">com/hmdp/utils/LoginInterceptor.java
+package com.hmdp.utils;
+
+import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.StrUtil;
+import com.hmdp.dto.UserDTO;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.web.servlet.HandlerInterceptor;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+public class LoginInterceptor implements HandlerInterceptor &#123;
+    // 这个类的对象是手动new出来的 没有通过Spring容器 所以需要通过构造方法去引用
+    // 拦截器不能给spring容器因为每次都会经过它去访问
+
+    @Override
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception &#123;
+        // 判断是否需要拦截(ThreadLocal中是否有用户)
+        if (UserHolder.getUser() == null) &#123;
+            // 没有，需要拦截，设置状态码
+            response.setStatus(401);
+            // 拦截
+            return false;
+        &#125;
+        // 有用户 放行
+        return true;
+    &#125;
+&#125;
+</code></pre>
+<pre><code class="java">com/hmdp/utils/RefreshTokenInterceptor.java
+package com.hmdp.utils;
+
+import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.util.StrUtil;
+import com.hmdp.dto.UserDTO;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.web.servlet.HandlerInterceptor;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+public class RefreshTokenInterceptor implements HandlerInterceptor &#123;
+    // 这个类的对象是手动new出来的 没有通过Spring容器 所以需要通过构造方法去引用
+    // 拦截器不能给spring容器因为每次都会经过它去访问
+    private StringRedisTemplate stringRedisTemplate;
+
+    public RefreshTokenInterceptor(StringRedisTemplate stringRedisTemplate) &#123;
+        this.stringRedisTemplate = stringRedisTemplate;
+    &#125;
+
+    @Override
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception &#123;
+
+        String token = request.getHeader(&quot;authorization&quot;);
+        if (StrUtil.isBlank(token)) &#123;
+            // 不存在：拦截，返回401状态码
+//            response.setStatus(401);
+            return true;
+        &#125;
+        String key = SystemConstants.LOGIN_CODE_TOKEN + token;
+        Map&lt;Object, Object&gt; userMap = stringRedisTemplate.opsForHash().entries(key);
+        // 判断用户是否存在
+//        if (ObjectUtil.isEmpty(user)) &#123;
+        if (userMap.isEmpty())&#123;
+            // 不存在，拦截
+//            response.setStatus(401);
+            return true;
+        &#125;
+        // 将查询到的Hash数据转为UserDTO对象
+        UserDTO userDTO = BeanUtil.fillBeanWithMap(userMap, new UserDTO(), false);
+
+        // 存在，保存用户信息到ThreadLocal
+//        UserDTO userDTO = (UserDTO) user; // 确保 user 已经是 UserDTO 类型
+        UserHolder.saveUser(userDTO);
+        // 刷新token有效期
+        stringRedisTemplate.expire(key, SystemConstants.REDIS_TIMEOUT, TimeUnit.MINUTES);
+        // 放行
+        return true;
+    &#125;
+
+    @Override
+    public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) throws Exception &#123;
+        // 移除用户
+        UserHolder.removeUser();
+    &#125;
+&#125;
+</code></pre>
+<pre><code class="java">com/hmdp/config/MvcConfig.java
+package com.hmdp.config;
+
+import com.hmdp.utils.LoginInterceptor;
+import com.hmdp.utils.RefreshTokenInterceptor;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+import javax.annotation.Resource;
+
+@Configuration
+public class MvcConfig implements WebMvcConfigurer &#123;
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) &#123;
+        // 登录拦截器
+        registry.addInterceptor(new LoginInterceptor())
+                .excludePathPatterns(
+                        &quot;/shop/**&quot;,
+                        &quot;/voucher/**&quot;,
+                        &quot;/shop-type/**&quot;,
+                        &quot;/upload/**&quot;,
+                        &quot;/blog/hot&quot;,
+                        &quot;/user/code&quot;,
+                        &quot;/user/login&quot;
+                ).order(1);
+        // token刷新拦截器
+        registry.addInterceptor(new RefreshTokenInterceptor(stringRedisTemplate)).addPathPatterns(&quot;/**&quot;).order(0);
+    &#125;
+&#125;
+</code></pre>
+<h4 id="商户查询缓存—练习题"><a href="#商户查询缓存—练习题" class="headerlink" title="商户查询缓存—练习题"></a>商户查询缓存—练习题</h4><pre><code class="java">com/hmdp/controller/ShopTypeController.java
+/**
+ * &lt;p&gt;
+ * 前端控制器
+ * &lt;/p&gt;
+ *
+ * @author 虎哥
+ * @since 2021-12-22
+ */
+@RestController
+@RequestMapping(&quot;/shop-type&quot;)
+public class ShopTypeController &#123;
+    @Resource
+    private IShopTypeService typeService;
+
+    @GetMapping(&quot;list&quot;)
+    public Result queryTypeList() &#123;
+//        List&lt;ShopType&gt; typeList = typeService
+//                .query().orderByAsc(&quot;sort&quot;).list();
+//        return Result.ok(typeList);
+        return typeService.listShop();
+    &#125;
+</code></pre>
+<pre><code class="java">com/hmdp/service/impl/ShopTypeServiceImpl.java
+/**
+ * &lt;p&gt;
+ *  服务实现类
+ * &lt;/p&gt;
+ * @since 2021-12-22
+ */
+@Service
+public class ShopTypeServiceImpl extends ServiceImpl&lt;ShopTypeMapper, ShopType&gt; implements IShopTypeService &#123;
+
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
+    @Override
+    public Result listShop() &#123;
+        String shopTypeCache = stringRedisTemplate.opsForValue().get(SystemConstants.CACHE_SHOP_TYPE_KEY);
+
+        if (ObjectUtil.isNotEmpty(shopTypeCache)) &#123;
+            Long ttl = stringRedisTemplate.getExpire(SystemConstants.CACHE_SHOP_TYPE_KEY, TimeUnit.MINUTES);
+            System.out.println(&quot;TTL for CACHE_SHOP_TYPE_KEY: &quot; + ttl + &quot; minutes&quot;);
+            List&lt;ShopType&gt; shopTypeList = JSONUtil.toList(shopTypeCache, ShopType.class);
+            return Result.ok(shopTypeList);
+        &#125;
+
+
+
+        List&lt;ShopType&gt; queryShopTypeList = query().orderByAsc(&quot;sort&quot;).list();
+        if (ObjectUtil.isEmpty(queryShopTypeList)) &#123;
+            return Result.fail(&quot;查询失败&quot;);
+        &#125;
+        stringRedisTemplate.opsForValue().set(SystemConstants.CACHE_SHOP_TYPE_KEY, JSONUtil.toJsonStr(queryShopTypeList), SystemConstants.SHOP_TYPE_TTL, TimeUnit.MINUTES);
+        return Result.ok(queryShopTypeList);
+    &#125;
+&#125;
+</code></pre>
+<h4 id="添加商铺缓存"><a href="#添加商铺缓存" class="headerlink" title="添加商铺缓存"></a>添加商铺缓存</h4><pre><code class="java">com/hmdp/service/impl/ShopServiceImpl.java
+package com.hmdp.service.impl;
+
+import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.json.JSONUtil;
+import com.hmdp.dto.Result;
+import com.hmdp.entity.Shop;
+import com.hmdp.mapper.ShopMapper;
+import com.hmdp.service.IShopService;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.hmdp.utils.SystemConstants;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Service;
+
+import javax.annotation.Resource;
+
+/**
+ * &lt;p&gt;
+ *  服务实现类
+ * &lt;/p&gt;
+ *
+ * @author 虎哥
+ * @since 2021-12-22
+ */
+@Service
+public class ShopServiceImpl extends ServiceImpl&lt;ShopMapper, Shop&gt; implements IShopService &#123;
+
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
+
+    @Override
+    public Result queryById(Long id) &#123;
+        // 从redis中查询商铺缓存
+        String shopJson = stringRedisTemplate.opsForValue().get(SystemConstants.CACHE_SHOP_KEY + id);
+        // 判断是否存在
+        if (ObjectUtil.isNotEmpty(shopJson)) &#123;
+            // 存在，直接返回
+            Shop shop = JSONUtil.toBean(shopJson, Shop.class);
+            return Result.ok(shop);
+        &#125;
+        // 不存在，根据id查询数据库
+        Shop shop = getById(id);
+        // 不存在，返回错误
+        if (ObjectUtil.isEmpty(shop)) &#123;
+            return Result.fail(&quot;店铺不存在&quot;);
+        &#125;
+        // 存在，写入redis
+        stringRedisTemplate.opsForValue().set(SystemConstants.CACHE_SHOP_KEY + id, JSONUtil.toJsonStr(shop));
+        // 返回
+        return Result.ok(shop);
+    &#125;
+&#125;
+</code></pre>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/a0152529cf933c8a2b70030f2d0869f8e7c6579e/%E7%BC%93%E5%AD%98%E7%AD%96%E7%95%A5.png"></p>
+<h4 id="实现商铺缓存与数据库的双写一致性"><a href="#实现商铺缓存与数据库的双写一致性" class="headerlink" title="实现商铺缓存与数据库的双写一致性"></a>实现商铺缓存与数据库的双写一致性</h4><h6 id="先更新后删除"><a href="#先更新后删除" class="headerlink" title="先更新后删除"></a>先更新后删除</h6><pre><code class="java">com/hmdp/controller/ShopController.java
+ /**
+     * 更新商铺信息
+     * @param shop 商铺数据
+     * @return 无
+     */
+    @PutMapping
+    public Result updateShop(@RequestBody Shop shop) &#123;
+//        shopService.updateById(shop);
+        return shopService.update(shop);
+
+    &#125;
+</code></pre>
+<pre><code class="java">com/hmdp/service/impl/ShopServiceImpl.java
+@Override
+    public Result update(Shop shop) &#123;
+        Long id = shop.getId();
+        if (ObjectUtil.isEmpty(id)) &#123;
+            return Result.fail(&quot;店铺id不能为空&quot;);
+        &#125;
+        // 更新数据库
+        updateById(shop);
+        // 删除缓存
+        stringRedisTemplate.delete(SystemConstants.CACHE_SHOP_KEY + id);
+        return Result.ok();
+    &#125;
+</code></pre>
+<h4 id="缓存穿透的解决思路"><a href="#缓存穿透的解决思路" class="headerlink" title="缓存穿透的解决思路"></a>缓存穿透的解决思路</h4><ul>
+<li><h6 id="缓存空对象"><a href="#缓存空对象" class="headerlink" title="缓存空对象"></a>缓存空对象</h6><ul>
+<li><strong>优点</strong>：实现简单，维护方便</li>
+<li><strong>缺点</strong>：<ul>
+<li>额外的内存消耗</li>
+<li>可能造成短期的不一致</li>
+</ul>
+</li>
+</ul>
+<blockquote>
+<p>缓存null的时候加一个TTL</p>
+</blockquote>
+</li>
+<li><h6 id="布隆过滤器算法-bitMap数组用Hash值去判断"><a href="#布隆过滤器算法-bitMap数组用Hash值去判断" class="headerlink" title="布隆过滤器算法[bitMap数组用Hash值去判断]"></a>布隆过滤器<del>算法</del>[bitMap数组用Hash值去判断]</h6><ul>
+<li><strong>优点</strong>：内存占用较少，没有多余key</li>
+<li><strong>缺点</strong>：<ul>
+<li>实现复杂</li>
+<li>存在误判可能</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h4 id="缓存击穿的解决思路"><a href="#缓存击穿的解决思路" class="headerlink" title="缓存击穿的解决思路"></a>缓存击穿的解决思路</h4><ul>
+<li><h6 id="互斥锁"><a href="#互斥锁" class="headerlink" title="互斥锁"></a>互斥锁</h6></li>
+<li><h6 id="逻辑过期"><a href="#逻辑过期" class="headerlink" title="逻辑过期"></a>逻辑过期</h6></li>
+</ul>
+<h4 id="缓存雪崩的解决思路"><a href="#缓存雪崩的解决思路" class="headerlink" title="缓存雪崩的解决思路"></a>缓存雪崩的解决思路</h4><ul>
+<li><h6 id="给不同的key的TTL添加随机值"><a href="#给不同的key的TTL添加随机值" class="headerlink" title="给不同的key的TTL添加随机值"></a>给不同的key的TTL添加随机值</h6></li>
+<li><p>利用Redis集群提高服务的可用性</p>
+</li>
+<li><p>给缓存业务添加降级限流策略</p>
+</li>
+<li><p>给业务添加多级缓存</p>
+</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/04fe92d2f230e21ce689b82308a43cd4e944d086/%E7%BC%93%E5%AD%98%E5%87%BB%E7%A9%BF%E9%9B%AA%E5%B4%A9%E7%AD%89%E4%BB%A3%E7%A0%81%E5%AE%9E%E7%8E%B0.png"></p>
 
     </div>
 

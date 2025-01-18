@@ -575,6 +575,311 @@ public class UserController &#123;
     &#125;
 &#125;
 </code></pre>
+<h4 id="解决状态登录刷新的问题【双重拦截器】"><a href="#解决状态登录刷新的问题【双重拦截器】" class="headerlink" title="解决状态登录刷新的问题【双重拦截器】"></a>解决状态登录刷新的问题【双重拦截器】</h4><p>请求 → <strong>拦截器①</strong>(拦截一切路径)[<u>流程：获取token、查询Redis用户、保存到ThreadLocal、刷新Token有效期、放行</u>] → <strong>拦截器②</strong>(拦截需要登录的路径)[查询ThreadLocal的用户, 不存在则拦截、存在则继续]</p>
+<pre><code class="java">com/hmdp/utils/LoginInterceptor.java
+package com.hmdp.utils;
+
+import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.StrUtil;
+import com.hmdp.dto.UserDTO;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.web.servlet.HandlerInterceptor;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+public class LoginInterceptor implements HandlerInterceptor &#123;
+    // 这个类的对象是手动new出来的 没有通过Spring容器 所以需要通过构造方法去引用
+    // 拦截器不能给spring容器因为每次都会经过它去访问
+
+    @Override
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception &#123;
+        // 判断是否需要拦截(ThreadLocal中是否有用户)
+        if (UserHolder.getUser() == null) &#123;
+            // 没有，需要拦截，设置状态码
+            response.setStatus(401);
+            // 拦截
+            return false;
+        &#125;
+        // 有用户 放行
+        return true;
+    &#125;
+&#125;
+</code></pre>
+<pre><code class="java">com/hmdp/utils/RefreshTokenInterceptor.java
+package com.hmdp.utils;
+
+import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.util.StrUtil;
+import com.hmdp.dto.UserDTO;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.web.servlet.HandlerInterceptor;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+public class RefreshTokenInterceptor implements HandlerInterceptor &#123;
+    // 这个类的对象是手动new出来的 没有通过Spring容器 所以需要通过构造方法去引用
+    // 拦截器不能给spring容器因为每次都会经过它去访问
+    private StringRedisTemplate stringRedisTemplate;
+
+    public RefreshTokenInterceptor(StringRedisTemplate stringRedisTemplate) &#123;
+        this.stringRedisTemplate = stringRedisTemplate;
+    &#125;
+
+    @Override
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception &#123;
+
+        String token = request.getHeader(&quot;authorization&quot;);
+        if (StrUtil.isBlank(token)) &#123;
+            // 不存在：拦截，返回401状态码
+//            response.setStatus(401);
+            return true;
+        &#125;
+        String key = SystemConstants.LOGIN_CODE_TOKEN + token;
+        Map&lt;Object, Object&gt; userMap = stringRedisTemplate.opsForHash().entries(key);
+        // 判断用户是否存在
+//        if (ObjectUtil.isEmpty(user)) &#123;
+        if (userMap.isEmpty())&#123;
+            // 不存在，拦截
+//            response.setStatus(401);
+            return true;
+        &#125;
+        // 将查询到的Hash数据转为UserDTO对象
+        UserDTO userDTO = BeanUtil.fillBeanWithMap(userMap, new UserDTO(), false);
+
+        // 存在，保存用户信息到ThreadLocal
+//        UserDTO userDTO = (UserDTO) user; // 确保 user 已经是 UserDTO 类型
+        UserHolder.saveUser(userDTO);
+        // 刷新token有效期
+        stringRedisTemplate.expire(key, SystemConstants.REDIS_TIMEOUT, TimeUnit.MINUTES);
+        // 放行
+        return true;
+    &#125;
+
+    @Override
+    public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) throws Exception &#123;
+        // 移除用户
+        UserHolder.removeUser();
+    &#125;
+&#125;
+</code></pre>
+<pre><code class="java">com/hmdp/config/MvcConfig.java
+package com.hmdp.config;
+
+import com.hmdp.utils.LoginInterceptor;
+import com.hmdp.utils.RefreshTokenInterceptor;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+import javax.annotation.Resource;
+
+@Configuration
+public class MvcConfig implements WebMvcConfigurer &#123;
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) &#123;
+        // 登录拦截器
+        registry.addInterceptor(new LoginInterceptor())
+                .excludePathPatterns(
+                        &quot;/shop/**&quot;,
+                        &quot;/voucher/**&quot;,
+                        &quot;/shop-type/**&quot;,
+                        &quot;/upload/**&quot;,
+                        &quot;/blog/hot&quot;,
+                        &quot;/user/code&quot;,
+                        &quot;/user/login&quot;
+                ).order(1);
+        // token刷新拦截器
+        registry.addInterceptor(new RefreshTokenInterceptor(stringRedisTemplate)).addPathPatterns(&quot;/**&quot;).order(0);
+    &#125;
+&#125;
+</code></pre>
+<h4 id="商户查询缓存—练习题"><a href="#商户查询缓存—练习题" class="headerlink" title="商户查询缓存—练习题"></a>商户查询缓存—练习题</h4><pre><code class="java">com/hmdp/controller/ShopTypeController.java
+/**
+ * &lt;p&gt;
+ * 前端控制器
+ * &lt;/p&gt;
+ *
+ * @author 虎哥
+ * @since 2021-12-22
+ */
+@RestController
+@RequestMapping(&quot;/shop-type&quot;)
+public class ShopTypeController &#123;
+    @Resource
+    private IShopTypeService typeService;
+
+    @GetMapping(&quot;list&quot;)
+    public Result queryTypeList() &#123;
+//        List&lt;ShopType&gt; typeList = typeService
+//                .query().orderByAsc(&quot;sort&quot;).list();
+//        return Result.ok(typeList);
+        return typeService.listShop();
+    &#125;
+</code></pre>
+<pre><code class="java">com/hmdp/service/impl/ShopTypeServiceImpl.java
+/**
+ * &lt;p&gt;
+ *  服务实现类
+ * &lt;/p&gt;
+ * @since 2021-12-22
+ */
+@Service
+public class ShopTypeServiceImpl extends ServiceImpl&lt;ShopTypeMapper, ShopType&gt; implements IShopTypeService &#123;
+
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
+    @Override
+    public Result listShop() &#123;
+        String shopTypeCache = stringRedisTemplate.opsForValue().get(SystemConstants.CACHE_SHOP_TYPE_KEY);
+
+        if (ObjectUtil.isNotEmpty(shopTypeCache)) &#123;
+            Long ttl = stringRedisTemplate.getExpire(SystemConstants.CACHE_SHOP_TYPE_KEY, TimeUnit.MINUTES);
+            System.out.println(&quot;TTL for CACHE_SHOP_TYPE_KEY: &quot; + ttl + &quot; minutes&quot;);
+            List&lt;ShopType&gt; shopTypeList = JSONUtil.toList(shopTypeCache, ShopType.class);
+            return Result.ok(shopTypeList);
+        &#125;
+
+
+
+        List&lt;ShopType&gt; queryShopTypeList = query().orderByAsc(&quot;sort&quot;).list();
+        if (ObjectUtil.isEmpty(queryShopTypeList)) &#123;
+            return Result.fail(&quot;查询失败&quot;);
+        &#125;
+        stringRedisTemplate.opsForValue().set(SystemConstants.CACHE_SHOP_TYPE_KEY, JSONUtil.toJsonStr(queryShopTypeList), SystemConstants.SHOP_TYPE_TTL, TimeUnit.MINUTES);
+        return Result.ok(queryShopTypeList);
+    &#125;
+&#125;
+</code></pre>
+<h4 id="添加商铺缓存"><a href="#添加商铺缓存" class="headerlink" title="添加商铺缓存"></a>添加商铺缓存</h4><pre><code class="java">com/hmdp/service/impl/ShopServiceImpl.java
+package com.hmdp.service.impl;
+
+import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.json.JSONUtil;
+import com.hmdp.dto.Result;
+import com.hmdp.entity.Shop;
+import com.hmdp.mapper.ShopMapper;
+import com.hmdp.service.IShopService;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.hmdp.utils.SystemConstants;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Service;
+
+import javax.annotation.Resource;
+
+/**
+ * &lt;p&gt;
+ *  服务实现类
+ * &lt;/p&gt;
+ *
+ * @author 虎哥
+ * @since 2021-12-22
+ */
+@Service
+public class ShopServiceImpl extends ServiceImpl&lt;ShopMapper, Shop&gt; implements IShopService &#123;
+
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
+
+    @Override
+    public Result queryById(Long id) &#123;
+        // 从redis中查询商铺缓存
+        String shopJson = stringRedisTemplate.opsForValue().get(SystemConstants.CACHE_SHOP_KEY + id);
+        // 判断是否存在
+        if (ObjectUtil.isNotEmpty(shopJson)) &#123;
+            // 存在，直接返回
+            Shop shop = JSONUtil.toBean(shopJson, Shop.class);
+            return Result.ok(shop);
+        &#125;
+        // 不存在，根据id查询数据库
+        Shop shop = getById(id);
+        // 不存在，返回错误
+        if (ObjectUtil.isEmpty(shop)) &#123;
+            return Result.fail(&quot;店铺不存在&quot;);
+        &#125;
+        // 存在，写入redis
+        stringRedisTemplate.opsForValue().set(SystemConstants.CACHE_SHOP_KEY + id, JSONUtil.toJsonStr(shop));
+        // 返回
+        return Result.ok(shop);
+    &#125;
+&#125;
+</code></pre>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/a0152529cf933c8a2b70030f2d0869f8e7c6579e/%E7%BC%93%E5%AD%98%E7%AD%96%E7%95%A5.png"></p>
+<h4 id="实现商铺缓存与数据库的双写一致性"><a href="#实现商铺缓存与数据库的双写一致性" class="headerlink" title="实现商铺缓存与数据库的双写一致性"></a>实现商铺缓存与数据库的双写一致性</h4><h6 id="先更新后删除"><a href="#先更新后删除" class="headerlink" title="先更新后删除"></a>先更新后删除</h6><pre><code class="java">com/hmdp/controller/ShopController.java
+ /**
+     * 更新商铺信息
+     * @param shop 商铺数据
+     * @return 无
+     */
+    @PutMapping
+    public Result updateShop(@RequestBody Shop shop) &#123;
+//        shopService.updateById(shop);
+        return shopService.update(shop);
+
+    &#125;
+</code></pre>
+<pre><code class="java">com/hmdp/service/impl/ShopServiceImpl.java
+@Override
+    public Result update(Shop shop) &#123;
+        Long id = shop.getId();
+        if (ObjectUtil.isEmpty(id)) &#123;
+            return Result.fail(&quot;店铺id不能为空&quot;);
+        &#125;
+        // 更新数据库
+        updateById(shop);
+        // 删除缓存
+        stringRedisTemplate.delete(SystemConstants.CACHE_SHOP_KEY + id);
+        return Result.ok();
+    &#125;
+</code></pre>
+<h4 id="缓存穿透的解决思路"><a href="#缓存穿透的解决思路" class="headerlink" title="缓存穿透的解决思路"></a>缓存穿透的解决思路</h4><ul>
+<li><h6 id="缓存空对象"><a href="#缓存空对象" class="headerlink" title="缓存空对象"></a>缓存空对象</h6><ul>
+<li><strong>优点</strong>：实现简单，维护方便</li>
+<li><strong>缺点</strong>：<ul>
+<li>额外的内存消耗</li>
+<li>可能造成短期的不一致</li>
+</ul>
+</li>
+</ul>
+<blockquote>
+<p>缓存null的时候加一个TTL</p>
+</blockquote>
+</li>
+<li><h6 id="布隆过滤器算法-bitMap数组用Hash值去判断"><a href="#布隆过滤器算法-bitMap数组用Hash值去判断" class="headerlink" title="布隆过滤器算法[bitMap数组用Hash值去判断]"></a>布隆过滤器<del>算法</del>[bitMap数组用Hash值去判断]</h6><ul>
+<li><strong>优点</strong>：内存占用较少，没有多余key</li>
+<li><strong>缺点</strong>：<ul>
+<li>实现复杂</li>
+<li>存在误判可能</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h4 id="缓存击穿的解决思路"><a href="#缓存击穿的解决思路" class="headerlink" title="缓存击穿的解决思路"></a>缓存击穿的解决思路</h4><ul>
+<li><h6 id="互斥锁"><a href="#互斥锁" class="headerlink" title="互斥锁"></a>互斥锁</h6></li>
+<li><h6 id="逻辑过期"><a href="#逻辑过期" class="headerlink" title="逻辑过期"></a>逻辑过期</h6></li>
+</ul>
+<h4 id="缓存雪崩的解决思路"><a href="#缓存雪崩的解决思路" class="headerlink" title="缓存雪崩的解决思路"></a>缓存雪崩的解决思路</h4><ul>
+<li><h6 id="给不同的key的TTL添加随机值"><a href="#给不同的key的TTL添加随机值" class="headerlink" title="给不同的key的TTL添加随机值"></a>给不同的key的TTL添加随机值</h6></li>
+<li><p>利用Redis集群提高服务的可用性</p>
+</li>
+<li><p>给缓存业务添加降级限流策略</p>
+</li>
+<li><p>给业务添加多级缓存</p>
+</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/04fe92d2f230e21ce689b82308a43cd4e944d086/%E7%BC%93%E5%AD%98%E5%87%BB%E7%A9%BF%E9%9B%AA%E5%B4%A9%E7%AD%89%E4%BB%A3%E7%A0%81%E5%AE%9E%E7%8E%B0.png"></p>
 
             
         </div>
@@ -589,7 +894,7 @@ public class UserController &#123;
         
         <span class="tag">
             
-            <a href="/tags/后端" style=color:#ff7d73>
+            <a href="/tags/后端" style=color:#00bcd4>
                 后端
             </a>
         </span>
@@ -6305,7 +6610,387 @@ void testBulkRequest() throws IOException &#123;
 </ul>
 <hr>
 <h1 id="分布式搜索引擎03"><a href="#分布式搜索引擎03" class="headerlink" title="分布式搜索引擎03"></a>分布式搜索引擎03</h1><p><code>E:\广州黑马JavaEE就业198期—洪哥\微服务\es\day1-es\讲义\PPT\分布式搜索引擎.pptx</code></p>
-<h1 id="0-学习目标"><a href="#0-学习目标" class="headerlink" title="0.学习目标"></a>0.学习目标</h1><h1 id="1-数据聚合"><a href="#1-数据聚合" class="headerlink" title="1.数据聚合"></a>1.数据聚合</h1><p>**<a target="_blank" rel="noopener" href="https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations.html">聚合（</a><a target="_blank" rel="noopener" href="https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations.html">aggregations</a><a target="_blank" rel="noopener" href="https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations.html">）</a>**可以让我们极其方便的实现对数据的统计、分析、运算。例如：</p>
+<h3 id="DSL查询语法—全文检索查询【Idea版】"><a href="#DSL查询语法—全文检索查询【Idea版】" class="headerlink" title="DSL查询语法—全文检索查询【Idea版】"></a>DSL查询语法—全文检索查询【Idea版】</h3><h6 id="复合查询-Boolean-Query"><a href="#复合查询-Boolean-Query" class="headerlink" title="复合查询 Boolean Query"></a><span style = "color:blue"><strong>复合查询</strong> <strong>Boolean Query</strong></span></h6><p>布尔查询是一个或多个查询子句的组合。子查询的组合方式有：</p>
+<p>• <strong>must</strong>：必须匹配每个子查询，类似“与”</p>
+<p>• <strong>should</strong>：选择性匹配子查询，类似“或”</p>
+<p>• <strong>must_not</strong>：必须不匹配，不参与算分，类似“非”</p>
+<p>• <strong>filter</strong>：必须匹配，不参与算分</p>
+<pre><code class="java">GET /hotel/_search
+&#123;
+  &quot;query&quot;: &#123;
+    &quot;bool&quot;: &#123;
+      &quot;must&quot;: [
+        &#123;&quot;term&quot;: &#123;&quot;city&quot;: &quot;上海&quot; &#125;&#125;
+      ],
+      &quot;should&quot;: [
+        &#123;&quot;term&quot;: &#123;&quot;brand&quot;: &quot;皇冠假日&quot; &#125;&#125;,
+        &#123;&quot;term&quot;: &#123;&quot;brand&quot;: &quot;华美达&quot; &#125;&#125;
+      ],
+      &quot;must_not&quot;: [
+        &#123; &quot;range&quot;: &#123; &quot;price&quot;: &#123; &quot;lte&quot;: 500 &#125; &#125;&#125;
+      ],
+      &quot;filter&quot;: [
+        &#123; &quot;range&quot;: &#123;&quot;score&quot;: &#123; &quot;gte&quot;: 45 &#125; &#125;&#125;
+      ]
+    &#125;
+  &#125;
+&#125;
+</code></pre>
+<blockquote>
+<p>• <strong>match</strong>：根据一个字段查询</p>
+<p>• <strong>multi_match</strong>：根据多个字段查询，参与查询字段越多，查询性能越差</p>
+</blockquote>
+<pre><code class="java">boolQuery.must(QueryBuilders.matchQuery(&quot;all&quot;, key));
+// 为空，查询所有
+boolQuery.must(QueryBuilders.matchAllQuery());
+
+
+GET /hotel/_search
+&#123;
+  &quot;query&quot;: &#123;
+    &quot;bool&quot;: &#123;
+      &quot;must&quot;: [
+        &#123;
+          &quot;term&quot;: &#123; &quot;city&quot;: &quot;杭州&quot; &#125;
+        &#125;
+      ],
+      &quot;filter&quot;: [
+        &#123;
+          &quot;range&quot;: &#123;
+            &quot;price&quot;: &#123; &quot;lte&quot;: 250 &#125;
+          &#125;
+        &#125;
+      ]
+    &#125;
+  &#125;
+&#125;
+
+
+// 创建布尔查询
+BoolQueryBuilder boolQuery = QueryBuilders.boolQuery();
+// 添加must条件
+boolQuery.must(QueryBuilders.termQuery(&quot;city&quot;, &quot;杭州&quot;)); 
+// 添加filter条件
+boolQuery.filter(QueryBuilders.rangeQuery(&quot;price&quot;).lte(250));
+
+
+
+
+
+
+GET /hotel/_search
+&#123;
+  &quot;query&quot;: &#123;
+    &quot;match_all&quot;: &#123;&#125;
+  &#125;
+&#125;
+GET /hotel/_search
+&#123;
+  &quot;query&quot;: &#123;
+    &quot;match&quot;: &#123;
+      &quot;all&quot;: &quot;如家&quot;
+    &#125;
+  &#125;
+&#125;
+GET /hotel/_search
+&#123;
+  &quot;query&quot;: &#123;
+    &quot;multi_match&quot;: &#123;
+      &quot;query&quot;: &quot;如家&quot;,
+      &quot;fields&quot;: [&quot;brand&quot;, &quot;name&quot;]
+    &#125;
+  &#125;
+&#125;
+
+// 单字段查询
+QueryBuilders.matchQuery(&quot;all&quot;, &quot;如家&quot;);
+// 多字段查询
+QueryBuilders.multiMatchQuery(&quot;如家&quot;, &quot;name&quot;, &quot;business&quot;);
+</code></pre>
+<h6 id="精确查询"><a href="#精确查询" class="headerlink" title="精确查询"></a><span style = "color:blue">精确查询</span></h6><p>精确查询一般是查找keyword、数值、日期、boolean等类型字段。所以不会对搜索条件分词。常见的有：</p>
+<p>• <strong>term</strong>：根据词条精确匹配，一般搜索keyword类型、数值类型、布尔类型、日期类型字段</p>
+<p>• <strong>range</strong>：根据数值范围查询，可以是数值、日期的范围</p>
+<pre><code class="java">//         1.2.品牌
+        String brand = params.getBrand();
+        if (StringUtils.isNotBlank(brand)) &#123;
+            boolQuery.filter(QueryBuilders.termQuery(&quot;brand&quot;, brand));
+        &#125;
+//         1.5.价格范围
+        Integer minPrice = params.getMinPrice();
+        Integer maxPrice = params.getMaxPrice();
+        if (minPrice != null &amp;&amp; maxPrice != null) &#123;
+            maxPrice = maxPrice == 0 ? Integer.MAX_VALUE : maxPrice;
+            boolQuery.filter(QueryBuilders.rangeQuery(&quot;price&quot;).gte(minPrice).lte(maxPrice));
+        &#125;
+
+
+
+GET /hotel/_search
+&#123;
+  &quot;query&quot;: &#123;
+    &quot;term&quot;: &#123;
+      &quot;city&quot;: &quot;杭州&quot;
+    &#125;
+  &#125;
+&#125;
+GET /hotel/_search
+&#123;
+  &quot;query&quot;: &#123;
+    &quot;range&quot;: &#123;
+      &quot;price&quot;: &#123; &quot;gte&quot;: 100, &quot;lte&quot;: 150 &#125;
+    &#125;
+  &#125;
+&#125;
+
+// 词条查询
+QueryBuilders.termQuery(&quot;city&quot;, &quot;杭州&quot;); 
+// 范围查询
+QueryBuilders.rangeQuery(&quot;price&quot;).gte(100).lte(150);
+</code></pre>
+<h6 id="地理查询"><a href="#地理查询" class="headerlink" title="地理查询"></a><span style = "color:blue">地理查询</span></h6><p>• <strong>geo_bounding_box</strong>：查询geo_point值落在某个矩形范围的所有文档</p>
+<p>• <strong>geo_distance</strong>：查询到指定中心点小于某个距离值的所有文档</p>
+<pre><code class="java">// 4.6.排序信息
+            Object[] sortValues = hit.getSortValues();
+            if (sortValues.length &gt; 0) &#123;
+                hotelDoc.setDistance(sortValues[0]);
+            &#125;
+</code></pre>
+<h6 id="相关性算分"><a href="#相关性算分" class="headerlink" title="相关性算分"></a><span style = "color:blue">相关性算分</span></h6><p>• <strong>fuction score</strong>：算分函数查询，可以控制文档相关性算分，控制文档排名。例如百度竞价</p>
+<blockquote>
+<p><strong>算分函数</strong>（Score Function）在Elasticsearch中用于调整查询结果的评分。以下是算分函数的主要作用和解释：<br>原始评分：默认情况下，Elasticsearch会根据文档与查询条件的匹配程度为每个文档计算一个评分（_score），这个评分决定了文档在搜索结果中的排序。<br>算分函数的作用：<br>调整评分：通过算分函数可以对原始评分进行调整，以更好地满足业务需求。<br>增加权重：可以为某些特定条件下的文档增加权重，使得这些文档在搜索结果中排得更靠前。</p>
+<p><strong>原始查询</strong> (boolQuery)：<br>这是你原本的查询条件，它决定了哪些文档会被检索出来，并为这些文档生成初始评分。</p>
+<p><strong>算分函数数组</strong>：<br>你定义了一个算分函数数组，其中包含一个 FilterFunctionBuilder。</p>
+<p><strong>过滤条件</strong> (termQuery(“isAD”, true))：<br>只有当文档的 isAD 字段值为 true 时，才会应用算分函数。</p>
+<p><strong>算分函数</strong> (weightFactorFunction(10))：<br>对于满足 isAD 条件的文档，其评分会被乘以10。也就是说，这些文档的最终评分会比其他文档更高，从而在搜索结果中排得更靠前。</p>
+</blockquote>
+<pre><code class="java">// 2.算分函数查询
+        FunctionScoreQueryBuilder functionScoreQuery = QueryBuilders.functionScoreQuery(
+                boolQuery, // 原始查询，boolQuery
+                new FunctionScoreQueryBuilder.FilterFunctionBuilder[]&#123; // function数组
+                        new FunctionScoreQueryBuilder.FilterFunctionBuilder(
+                                QueryBuilders.termQuery(&quot;isAD&quot;, true), // 过滤条件
+                                ScoreFunctionBuilders.weightFactorFunction(10) // 算分函数
+                        )
+                &#125;
+        );
+</code></pre>
+<h5 id="给“如家”这个品牌的酒店排名靠前一些"><a href="#给“如家”这个品牌的酒店排名靠前一些" class="headerlink" title="给“如家”这个品牌的酒店排名靠前一些"></a>给“如家”这个品牌的酒店排名靠前一些</h5><p>把这个问题翻译一下，function score需要的三要素：</p>
+<p>1.哪些文档需要算分加权？</p>
+<p> √ 品牌为如家的酒店</p>
+<p>2.算分函数是什么？</p>
+<p> √ weight就可以</p>
+<p>3.加权模式是什么？</p>
+<p> √ 求和</p>
+<pre><code class="java">GET /hotel/_search
+&#123;
+  &quot;query&quot;: &#123;
+    &quot;function_score&quot;: &#123;
+      &quot;query&quot;: &#123;// ... &#125;,
+      &quot;functions&quot;: [ // 算分函数
+        &#123;
+          &quot;filter&quot;: &#123; // 满足的条件，品牌必须是如家
+            &quot;term&quot;: &#123;
+              &quot;brand&quot;: &quot;如家&quot;
+            &#125;
+          &#125;,
+          &quot;weight&quot;: 2 // 算分权重为2
+        &#125;
+      ],
+      &quot;boost_mode&quot;: &quot;sum&quot;
+    &#125;
+  &#125;
+&#125;
+</code></pre>
+<h6 id="要求：搜索名字包含“如家”，价格不高于400，在坐标31-21-121-5周围10km范围内的酒店。"><a href="#要求：搜索名字包含“如家”，价格不高于400，在坐标31-21-121-5周围10km范围内的酒店。" class="headerlink" title="要求：搜索名字包含“如家”，价格不高于400，在坐标31.21,121.5周围10km范围内的酒店。"></a>要求：搜索名字包含“如家”，价格不高于400，在坐标31.21,121.5周围10km范围内的酒店。</h6><pre><code class="java">GET /hotel/_search
+&#123;
+  &quot;query&quot;: &#123;
+    &quot;bool&quot;: &#123;
+      &quot;must&quot;: [
+        &#123;
+          &quot;match&quot;: &#123;&quot;name&quot;: &quot;如家&quot;&#125;
+        &#125;
+      ],
+      &quot;must_not&quot;: [
+        &#123;
+          &quot;range&quot;: &#123; &quot;price&quot;: &#123;&quot;gt&quot;: 400&#125;&#125;
+        &#125;
+      ],
+      &quot;filter&quot;: [
+        &#123;
+          &quot;geo_distance&quot;: &#123;
+            &quot;distance&quot;: &quot;10km&quot;, &quot;location&quot;: &#123;&quot;lat&quot;: 31.21, &quot;lon&quot;: 121.5&#125;
+          &#125;
+        &#125;
+      ]
+    &#125;
+  &#125;
+&#125;
+</code></pre>
+<h5 id="排序"><a href="#排序" class="headerlink" title="排序"></a><span style = "color:blue">排序</span></h5><p>elasticsearch支持对搜索<a target="_blank" rel="noopener" href="https://www.elastic.co/guide/en/elasticsearch/reference/current/sort-search-results.html">结果排序</a>，默认是根据相关度算分（_score）来排序。可以排序字段类型有：keyword类型、数值类型、地理坐标类型、日期类型等。</p>
+<pre><code class="java">GET /indexName/_search
+&#123;
+  &quot;query&quot;: &#123;
+    &quot;match_all&quot;: &#123;&#125;
+  &#125;,
+  &quot;sort&quot;: [
+    &#123;
+      &quot;FIELD&quot;: &quot;desc&quot;  // 排序字段和排序方式ASC、DESC
+    &#125;
+  ]
+&#125;
+
+GET /indexName/_search
+&#123;
+  &quot;query&quot;: &#123;
+    &quot;match_all&quot;: &#123;&#125;
+  &#125;,
+  &quot;sort&quot;: [
+    &#123;
+      &quot;_geo_distance&quot; : &#123;
+          &quot;FIELD&quot; : &quot;纬度，经度&quot;,
+          &quot;order&quot; : &quot;asc&quot;,
+          &quot;unit&quot; : &quot;km&quot;
+      &#125;
+    &#125;
+  ]
+&#125;
+</code></pre>
+<h5 id="分页"><a href="#分页" class="headerlink" title="分页"></a><span style = "color:blue">分页</span></h5><p>elasticsearch 默认情况下只返回top10的数据。而如果要查询更多数据就需要修改分页参数了。<br>elasticsearch中通过修改from、size参数来控制要返回的分页结果：</p>
+<pre><code class="java">GET /hotel/_search
+&#123;
+  &quot;query&quot;: &#123;
+    &quot;match_all&quot;: &#123;&#125;
+  &#125;,
+  &quot;from&quot;: 990, // 分页开始的位置，默认为0
+  &quot;size&quot;: 10, // 期望获取的文档总数
+  &quot;sort&quot;: [
+    &#123;&quot;price&quot;: &quot;asc&quot;&#125;
+  ]
+&#125;
+</code></pre>
+<h6 id="排序-分页"><a href="#排序-分页" class="headerlink" title="排序 + 分页"></a><span style = "color:blue">排序 + 分页</span></h6><pre><code class="java">GET /indexName/_search
+&#123;
+  &quot;query&quot;: &#123;
+    &quot;match_all&quot;: &#123;&#125;
+  &#125;,
+  &quot;from&quot;: 0,
+  &quot;size&quot;: 5, 
+  &quot;sort&quot;: [
+    &#123;
+      &quot;FIELD&quot;: &quot;desc&quot;  
+    &#125;,
+  ]
+&#125;
+
+
+// 查询  
+request.source().query(QueryBuilders.matchAllQuery());
+// 分页 from + size
+request.source().from(0).size(5);
+// 价格排序
+request.source().sort(&quot;price&quot;, SortOrder.ASC);
+</code></pre>
+<p>ES是分布式的，所以会面临深度分页问题。例如按price排序后，获取from &#x3D; 990，size &#x3D;10的数据：<br>1.首先在每个数据分片上都排序并查询前1000条文档。</p>
+<p>2.然后将所有节点的结果聚合，在内存中重新排序选出前1000条文档</p>
+<p>3.最后从这1000条中，选取从990开始的10条文档<br>如果搜索页数过深，或者结果集（from + size）越大，对内存和CPU的消耗也越高。因此ES设定结果集查询的上限是10000</p>
+<h6 id="如何解决深度分页问题？"><a href="#如何解决深度分页问题？" class="headerlink" title="如何解决深度分页问题？"></a>如何解决深度分页问题？</h6><p>针对深度分页，ES提供了两种解决方案，<a target="_blank" rel="noopener" href="https://www.elastic.co/guide/en/elasticsearch/reference/current/paginate-search-results.html">官方文档</a>：<br>• <strong>search after</strong>：分页时需要排序，原理是从上一次的排序值开始，查询下一页数据。官方推荐使用的方式。<br>• scro<strong>l</strong>l：原理将排序数据形成快照，保存在内存。官方已经不推荐使用。</p>
+<blockquote>
+<p><strong>from + size</strong>：</p>
+<p>• 优点：支持随机翻页</p>
+<p>• 缺点：深度分页问题，默认查询上限（from + size）是10000</p>
+<p>• 场景：百度、京东、谷歌、淘宝这样的随机翻页搜索</p>
+<p><strong>after search</strong>：</p>
+<p>• 优点：没有查询上限（单次查询的size不超过10000）</p>
+<p>• 缺点：只能向后逐页查询，不支持随机翻页</p>
+<p>• 场景：没有随机翻页需求的搜索，例如手机向下滚动翻页</p>
+<p><strong>scroll</strong>：</p>
+<p>• 优点：没有查询上限（单次查询的size不超过10000）</p>
+<p>• 缺点：会有额外内存消耗，并且搜索结果是非实时的</p>
+<p>• 场景：海量数据的获取和迁移。从ES7.1开始不推荐，建议用 after search方案。</p>
+</blockquote>
+<h5 id="高亮"><a href="#高亮" class="headerlink" title="高亮"></a><span style = "color:blue">高亮</span></h5><p>高亮：就是在搜索结果中把搜索关键字突出显示。<br>原理是这样的：</p>
+<p>•将搜索结果中的关键字用标签标记出来<br>•在页面中给标签添加css样式</p>
+<p>语法：</p>
+<pre><code class="java">GET /hotel/_search
+&#123;
+  &quot;query&quot;: &#123;
+    &quot;match&quot;: &#123;
+      &quot;FIELD&quot;: &quot;TEXT&quot;
+    &#125;
+  &#125;,
+  &quot;highlight&quot;: &#123;
+    &quot;fields&quot;: &#123; // 指定要高亮的字段
+      &quot;FIELD&quot;: &#123;
+        &quot;pre_tags&quot;: &quot;&lt;em&gt;&quot;,  // 用来标记高亮字段的前置标签
+        &quot;post_tags&quot;: &quot;&lt;/em&gt;&quot; // 用来标记高亮字段的后置标签
+      &#125;
+    &#125;
+  &#125;
+&#125;
+
+
+GET /hotel/_search
+&#123;
+  &quot;query&quot;: &#123;
+    &quot;match&quot;: &#123;
+      &quot;all&quot;: &quot;如家&quot;
+    &#125;
+  &#125;,
+  &quot;highlight&quot;: &#123;
+    &quot;fields&quot;: &#123;
+      &quot;name&quot;: &#123;
+        &quot;require_field_match&quot;: &quot;false&quot;
+      &#125;
+    &#125;
+  &#125;
+&#125;
+</code></pre>
+<pre><code class="java">request.source().highlighter(new HighlightBuilder()
+                .field(&quot;name&quot;)
+// 是否需要与查询字段匹配 → 
+                .requireFieldMatch(false);
+</code></pre>
+<p><span style = "color:blue"><strong>高亮处理解析</strong></span></p>
+<pre><code class="java">&#123;
+  &quot;_index&quot; : &quot;hotel&quot;,
+  &quot;_type&quot; : &quot;_doc&quot;,
+  &quot;_id&quot; : &quot;339952837&quot;,
+  &quot;_score&quot; : 2.8947515,
+  &quot;_source&quot; : &#123;
+    &quot;id&quot; : 339952837,
+    &quot;name&quot; : &quot;如家酒店(北京良乡西路店)&quot;,
+    &quot;price&quot; : 159,
+    &quot;score&quot; : 46,
+    &quot;brand&quot; : &quot;如家&quot;,
+    &quot;city&quot; : &quot;北京&quot;,
+    &quot;location&quot; : &quot;39.73167, 116.132482&quot;,
+    &quot;pic&quot; : &quot;t0.jpg&quot;
+  &#125;,
+  &quot;highlight&quot; : &#123;
+    &quot;name&quot; : [
+      &quot;&lt;em&gt;如家&lt;/em&gt;酒店(北京良乡西路店)&quot;,
+    ]
+  &#125;
+&#125;
+
+
+
+// 获取source
+HotelDoc hotelDoc = JSON.parseObject(hit.getSourceAsString(), HotelDoc.class);
+
+// 处理高亮
+Map&lt;String, HighlightField&gt; highlightFields = hit.getHighlightFields();
+if (!CollectionUtils.isEmpty(highlightFields)) &#123;
+    // 获取高亮字段结果
+    HighlightField highlightField = highlightFields.get(&quot;name&quot;);
+    if (highlightField != null) &#123;
+        // 取出高亮结果数组中的第一个，就是酒店名称
+        String name = highlightField.getFragments()[0].string();
+        hotelDoc.setName(name);
+    &#125;
+&#125;
+</code></pre>
+<h1 id="1-数据聚合"><a href="#1-数据聚合" class="headerlink" title="1.数据聚合"></a>1.数据聚合</h1><p>**<a target="_blank" rel="noopener" href="https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations.html">聚合（</a><a target="_blank" rel="noopener" href="https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations.html">aggregations</a><a target="_blank" rel="noopener" href="https://www.elastic.co/guide/en/elasticsearch/reference/current/search-aggregations.html">）</a>**可以让我们极其方便的实现对数据的统计、分析、运算。例如：</p>
 <ul>
 <li>什么品牌的手机最受欢迎？</li>
 <li>这些手机的平均价格、最高价格、最低价格？</li>
@@ -7311,7 +7996,7 @@ public class HotelListener &#123;
         
         <span class="tag">
             
-            <a href="/tags/HM" style=color:#1bccbc>
+            <a href="/tags/HM" style=color:#ff7d73>
                 HM
             </a>
         </span>
@@ -7998,7 +8683,7 @@ POST /heima/_update/1
         
         <span class="tag">
             
-            <a href="/tags/后端" style=color:#00bcd4>
+            <a href="/tags/后端" style=color:#879cff>
                 后端
             </a>
         </span>
@@ -11263,7 +11948,7 @@ public class LoginDto &#123;
         
         <span class="tag">
             
-            <a href="/tags/HM" style=color:#00bcd4>
+            <a href="/tags/HM" style=color:#879cff>
                 HM
             </a>
         </span>
@@ -11599,7 +12284,7 @@ target/
         
         <span class="tag">
             
-            <a href="/tags/HM" style=color:#00bcd4>
+            <a href="/tags/HM" style=color:#ff7d73>
                 HM
             </a>
         </span>
@@ -12550,7 +13235,7 @@ kill -9 xxxxx
         
         <span class="tag">
             
-            <a href="/tags/HM" style=color:#ffa2c4>
+            <a href="/tags/HM" style=color:#879cff>
                 HM
             </a>
         </span>
@@ -14384,7 +15069,7 @@ public class ReportServiceImpl extends ServiceImpl&lt;ReportMapper, Emp&gt; impl
         
         <span class="tag">
             
-            <a href="/tags/后端" style=color:#00bcd4>
+            <a href="/tags/后端" style=color:#ffa2c4>
                 后端
             </a>
         </span>
@@ -15023,7 +15708,7 @@ public class TestStringToIntMap &#123;
         
         <span class="tag">
             
-            <a href="/tags/后端" style=color:#1bccbc>
+            <a href="/tags/后端" style=color:#ff7d73>
                 后端
             </a>
         </span>
@@ -15184,7 +15869,7 @@ public class TestStringToIntMap &#123;
         
         <span class="tag">
             
-            <a href="/tags/攻略" style=color:#1bccbc>
+            <a href="/tags/攻略" style=color:#879cff>
                 攻略
             </a>
         </span>
@@ -21000,7 +21685,7 @@ http &#123;
         
         <span class="tag">
             
-            <a href="/tags/HM" style=color:#00bcd4>
+            <a href="/tags/HM" style=color:#879cff>
                 HM
             </a>
         </span>

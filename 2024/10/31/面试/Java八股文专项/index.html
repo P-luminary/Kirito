@@ -1917,6 +1917,51 @@ public @interface EnableAutoConfiguration &#123;
 <li>在客户端的配置文件中，可以配置某一个服务调用的负载均衡（局部）</li>
 </ul>
 </blockquote>
+<blockquote>
+<p>首先，你需要创建一个类来实现 <code>IRule</code> 接口，这样就能自定义负载均衡的策略。</p>
+<pre><code class="java">java复制编辑import com.netflix.loadbalancer.IRule;
+import com.netflix.loadbalancer.Server;
+import com.netflix.loadbalancer.ZoneAwareLoadBalancer;
+import com.netflix.loadbalancer.RandomRule;
+
+import java.util.List;
+
+public class CustomLoadBalancerRule implements IRule &#123;
+
+    private IRule delegate = new RandomRule();  // 默认策略
+
+    @Override
+    public Server choose(Object key) &#123;
+        // 在这里实现自己的负载均衡算法
+        // 比如，你可以使用 RoundRobin、Random 或者基于健康检查的策略
+        return delegate.choose(key);
+    &#125;
+
+    @Override
+    public void setLoadBalancer(ZoneAwareLoadBalancer&lt;?&gt; lb) &#123;
+        delegate.setLoadBalancer(lb);
+    &#125;
+
+    @Override
+    public ZoneAwareLoadBalancer&lt;?&gt; getLoadBalancer() &#123;
+        return delegate.getLoadBalancer();
+    &#125;
+&#125;
+</code></pre>
+<p>然后，你需要在 Spring 配置类或者启动类上注入该自定义的负载均衡策略。</p>
+<pre><code class="java">java复制编辑import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class RibbonConfig &#123;
+
+    @Bean
+    public IRule customLoadBalancerRule() &#123;
+        return new CustomLoadBalancerRule();
+    &#125;
+&#125;
+</code></pre>
+</blockquote>
 <p><span style = "color:red"><strong>SpringCloud中什么是服务雪崩，怎么解决这个问题？</strong></span></p>
 <ul>
 <li>什么是&#x3D;&#x3D;<strong>服务雪崩</strong>&#x3D;&#x3D;？<del>一个服务失败，导致整条链路的服务都失败的情形</del></li>
@@ -1949,7 +1994,7 @@ public @interface EnableAutoConfiguration &#123;
 </ul>
 <p>② <strong>nginx限流</strong></p>
 <ul>
-<li>控制速率(突发流量)，使用的漏桶算法来实现过滤，让请求以固定的速率处理请求，可以应对突发流量</li>
+<li>控制速率(突发流量)，使用的<strong>漏桶算法</strong>来实现过滤，让请求以固定的速率处理请求，可以应对突发流量</li>
 <li>控制并发数，限制单个ip的连接数和并发链接的总数</li>
 </ul>
 <p>③ <strong>网关限流</strong></p>
@@ -1966,6 +2011,12 @@ public @interface EnableAutoConfiguration &#123;
 <ul>
 <li><strong>背景知识：</strong> 在电子商务等应用中，促销活动往往会引起用户的大量点击和购买行为，导致短时间内流量剧增。</li>
 <li><strong>限流原理：</strong> 为了应对这种突发的高流量，系统需要实施限流措施。限流是为了保护系统资源不被过度消耗，确保系统的稳定性和可靠性。常见的限流算法有固定窗口、滑动窗口、令牌桶和漏桶等。</li>
+</ul>
+<p><code>固定窗口： 假设每 1 分钟允许 100 次请求，10:00:00 到 10:01:00 期间的 100 次请求被允许，超出 100 次则会被限流，10:01:00 到 10:02:00 则重新开始计算。</code></p>
+<p><code>滑动窗口： 每 60 秒内最多允许 100 次请求，滑动窗口的时间长度为 60 秒，窗口内的请求数会随着时间滑动更新，防止请求在时间边界上积压</code></p>
+<p><code>令牌桶：假设每秒生成 10 个令牌，令牌桶的容量为 100 个令牌。如果 1 秒内有 15 个请求到达，则前 10 个请求能获得令牌并继续执行，剩余的 5 个请求需要等到下一个时间窗口令牌生成后再执行。</code></p>
+<p><code>漏桶：假设每秒钟流出 10 个请求，漏桶的容量为 100 个请求。如果 1 秒钟内接收了 30 个请求，系统只会处理 10 个请求，剩余的 20 个请求被丢弃，直到下一个时间点。</code></p>
+<ul>
 <li><strong>实施方式：</strong> 在您提到的情况下，可以采用以下策略：<ul>
 <li><strong>预判性扩容：</strong> 根据历史数据和活动规模预测流量，提前进行服务器资源的扩容。</li>
 <li><strong>动态限流：</strong> 在活动期间，根据实时监控的QPS数据动态调整限流阈值，保证系统平稳运行。</li>
@@ -1977,7 +2028,7 @@ public @interface EnableAutoConfiguration &#123;
 <li><strong>常规限流与系统最大承受QPS：</strong></li>
 </ol>
 <ul>
-<li><strong>背景知识：</strong> 常规限流是为了在日常运行中防止恶意攻击（如DDoS攻击）和保护系统资源不被滥用。</li>
+<li><strong>背景知识：</strong> <strong>常规限流</strong>是为了在日常运行中防止恶意攻击（如<strong>DDoS攻击</strong>）和保护系统资源不被滥用。</li>
 <li><strong>压测结果：</strong> 系统的最大承受QPS是通过压力测试得出的。压力测试（也称为负载测试）是通过模拟高并发访问来测试系统的极限性能，以确定系统在保证稳定运行的前提下能够承受的最大QPS。</li>
 <li><strong>原理分析：</strong> <ul>
 <li><strong>保护系统：</strong> 通过设定一个QPS上限，可以防止系统过载，保障系统的正常运行。</li>
@@ -1992,8 +2043,8 @@ public @interface EnableAutoConfiguration &#123;
 </blockquote>
 <p>为什么要限流？</p>
 <ul>
-<li>并发业务量大(突发流量)</li>
-<li>防止用户恶意刷接口</li>
+<li><strong>并发业务量大</strong>(突发流量)</li>
+<li>防止用户<strong>恶意刷接口</strong></li>
 </ul>
 <h6 id="限流的实现方式："><a href="#限流的实现方式：" class="headerlink" title="限流的实现方式："></a>限流的实现方式：</h6><ul>
 <li><p>&#x3D;&#x3D;<strong>Tomcat</strong>&#x3D;&#x3D;<del>单体项目可以,分布式不行</del>：可以设置最大连接数 <code>&lt;Connector port=&quot;8080&quot;...maxThreads=&quot;150&quot;...&gt;</code></p>

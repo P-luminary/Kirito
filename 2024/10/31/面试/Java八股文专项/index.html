@@ -126,7 +126,7 @@
             
             <span class="tag">
                 
-                <a href="/tags/面试" style=color:#ff7d73>
+                <a href="/tags/面试" style=color:#1bccbc>
                     面试
                 </a>
             </span>
@@ -4766,6 +4766,7 @@ jmap -dump:format=b,file=heap.hprof pid 【只有在项目运行时候才可以�
 <li>数据量很大就分库分表</li>
 </ul>
 <p><span style = "color:red"><strong>订单超时自动取消是怎么实现的？</strong></span></p>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/743d8b7cd78b5a1fe4023554fee8d62726435cb2/%E8%AE%A2%E5%8D%95%E8%B6%85%E6%97%B6%E8%87%AA%E5%8A%A8%E5%8F%96%E6%B6%88.png"></p>
 <h5 id="①-JDK自带的延时队列"><a href="#①-JDK自带的延时队列" class="headerlink" title="① JDK自带的延时队列"></a>① JDK自带的延时队列</h5><p><strong>优点</strong>：简单，不需要借助其他第三方组件，成本低。<br><strong>缺点</strong>：所有超时处理订单都要加入到<code>DelayQueue</code>中，占用内存大，没办法做到分布式处理，之恶能在集群中挑选一台leader专门处理，效率低<br>不适合订单量比较大的</p>
 <h5 id="②-基于RocketMQ的定时消息-—-延时消息"><a href="#②-基于RocketMQ的定时消息-—-延时消息" class="headerlink" title="② 基于RocketMQ的定时消息 — 延时消息"></a>② 基于RocketMQ的定时消息 — 延时消息</h5><p><strong>优点</strong>：使用简单，和使用普通消息一样，支持分布式。精度高，支持任意时刻</p>
 <p><strong>缺点</strong>：<strong>使用限制</strong>：定时时长最大值24小时。<br><strong>成本高</strong>：每个订单需要新增一个定时消息，且不会马上消费，给MQ带来很大的存储成本。<br>同一个时刻大量消息会导致<u>消息延迟:</u>定时消息的实现逻辑需要先经过定时存储等待触发，定时时间到达后才会被投递给消费者。因此，如果将大量定时消息的定时时间设置为同一时刻，则到达该时刻后会有大量消息同时需要被处理，会造成系统压力过大，导致消息分发延迟，影响定时精度。</p>
@@ -4775,6 +4776,25 @@ jmap -dump:format=b,file=heap.hprof pid 【只有在项目运行时候才可以�
 <li>如果订单量大需要占用中间件大量的存储空间，需要额外维护成本。</li>
 </ul>
 <h5 id="④-定时任务分布式处理【要按照成本思维的思考方式】"><a href="#④-定时任务分布式处理【要按照成本思维的思考方式】" class="headerlink" title="④ 定时任务分布式处理【要按照成本思维的思考方式】"></a>④ 定时任务分布式处理【要按照成本思维的思考方式】</h5><p>通过定时任务(任务调度)的批量处理 → 一次性把所有超时的订单全部捞出来 处理完再全部执行更新<br>如果使用中间件都要单独存储那些数据，如果存储压力大就要涉及到集群</p>
+<blockquote>
+<p>如果对于超时精度比较高，超时时间在24小时内，且不会有峰值压力的场景下，推荐使用RocketMQ的定时消息解决方案<br>在电商业务下，许多订单超时场景都在24小时以上，对于超时精度没那么敏感，并且有海量订单需要批处理，推荐使用基于定时任务的<strong>跑批</strong>解决方案。</p>
+</blockquote>
+<p><span style = "color:red"><strong>如何防止重复下单？</strong></span></p>
+<h5 id="方案一：提交订单按钮置灰-防止用户无意点击多次"><a href="#方案一：提交订单按钮置灰-防止用户无意点击多次" class="headerlink" title="方案一：提交订单按钮置灰 [防止用户无意点击多次]"></a>方案一：提交订单按钮置灰 [防止用户无意点击多次]</h5><h5 id="方案二：后端采用redis的setnx-来保证它的唯一幂等性"><a href="#方案二：后端采用redis的setnx-来保证它的唯一幂等性" class="headerlink" title="方案二：后端采用redis的setnx 来保证它的唯一幂等性"></a>方案二：后端采用redis的<span style = "color:red">setnx</span> 来保证它的唯一幂等性</h5><p>setnx：当我们调用setnx来去保存一个key和value的时候，如果这个value没有值的话，那么就会返回<strong>true</strong>保存成功；如果有值就会返回<strong>false</strong> → 保证多次存储只能存储一个值</p>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/be8debbe9711d790569ea62e3954dca9e6f2937b/%E5%A6%82%E4%BD%95%E9%98%B2%E6%AD%A2%E9%87%8D%E5%A4%8D%E4%B8%8B%E5%8D%95.png"></p>
+<p><span style = "color:red"><strong>怎么防止刷单？【人肉机刷单！！】</strong></span></p>
+<h5 id="业务风控"><a href="#业务风控" class="headerlink" title="业务风控"></a>业务风控</h5><p>提高羊毛门槛:实名认证、消费门槛、随机优惠<br>限制用户参与、中奖、奖励次数<br>根据用户的历史行为和忠诚度，提供不同层次的优惠，优待忠实用户<br>奖池(优惠券数量)限制上限</p>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/f3850683ae318970983834aa03ac35168bbf52a8/%E6%80%8E%E4%B9%88%E9%98%B2%E6%AD%A2%E4%BA%BA%E8%82%89%E5%88%B7%E5%8D%95%EF%BC%9F.png"></p>
+<p><span style="color:red"><strong>分布式集群架构下怎么保证并发安全？</strong></span></p>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/48788978d525bf16e52bb10180e63022de6a5ea3/%E5%88%86%E5%B8%83%E5%BC%8F%E9%9B%86%E7%BE%A4%E6%9E%B6%E6%9E%84%E4%B8%8B%E6%80%8E%E4%B9%88%E4%BF%9D%E8%AF%81%E5%B9%B6%E5%8F%91%E5%AE%89%E5%85%A8.png"></p>
+<p><span style = "color:red"><strong>让你设计一个扫码登录怎么实现？</strong></span></p>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/b3bbc19e0da554166000933c31bf749e2f6d3313/%E7%94%9F%E6%88%90%E4%BA%8C%E7%BB%B4%E7%A0%81.png"></p>
+<h6 id="生成二维码"><a href="#生成二维码" class="headerlink" title="生成二维码"></a>生成二维码</h6><p>请求登录页生成二维码，PC端请求后端生成一个二维码，此时在后端就会生成一个全局唯一的二维码ID，主要保存二维码的状态[二维码ID, NEW]，状态设置到Redis设置过期时间，然后把当前的二维码ID返回给前端，然后生成二维码 【前后端都可以生成 → 返回Base64的编码给前端】此时的二维码就绑定了用户的ID让用户扫描。</p>
+<h6 id="扫码"><a href="#扫码" class="headerlink" title="扫码"></a>扫码</h6><p>PC端和后端会建立一个轮询的请求，不断的根据二维码ID去查询二维码状态，一旦状态改变页面也会改变。也可以通过长连接<strong>WebSocket</strong>获取状态 <code>淘宝用的轮询、抖音用的长连接</code>，此时就可以扫码。<br>扫码前保证手机是登录状态 没有登录肯定是不能扫码的，登录后进行扫码就会携带手机端的用户token以及二维码的ID在后端去校验请求Token，如果校验成功就代表手机可以登录，此时可以变更二维码状态为扫描。前端就可以根据这个把页面变为<code>待确认</code>状态</p>
+<p><span style = "color:red"><strong>如何设计分布式日志存储架构？</strong></span></p>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/38bcadd4a99fd1093a4d7ab6e39c60340bfc73a8/%E5%A6%82%E4%BD%95%E8%AE%BE%E8%AE%A1%E5%88%86%E5%B8%83%E5%BC%8F%E6%97%A5%E5%BF%97%E5%AD%98%E5%82%A8%E6%9E%B6%E6%9E%84.png"></p>
+<p><span style = "color:red"><strong>项目难点？</strong></span><del>四方保险——day11-数据中心：时序数据库、看板展示【实战】</del></p>
+<p>技术上的难点：<strong>时序数据库</strong>、<strong>看板展示</strong></p>
 
     </div>
 

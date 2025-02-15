@@ -126,7 +126,7 @@
             
             <span class="tag">
                 
-                <a href="/tags/面试" style=color:#00bcd4>
+                <a href="/tags/面试" style=color:#1bccbc>
                     面试
                 </a>
             </span>
@@ -165,7 +165,7 @@
 <p>1.查询缓存,未命中 → 2.<strong>获取互斥锁成功</strong> → 3.查询数据库重建缓存数据 → 4.写入缓存 → 5.释放锁</p>
 <p>1.查询缓存,未命中 → 2.<strong>获取互斥锁失败</strong> → 3.休眠一会再重试 → 4.写入缓存重试 → 5.缓存命中</p>
 </li>
-<li><p><strong>解决方案二</strong>：<strong>逻辑过期</strong>[不设置过期时间] 【高可用 性能优 不能保证数据绝对一致 (用户体验)】</p>
+<li><p><strong>解决方案二</strong>：<strong>逻辑过期</strong>[不设置过期时间] 【高可用 性能优 不能保证数据绝对一致 (用户体验)】<br>也可以搞个<u><strong>永不过期</strong></u> 具体是先在业务里写好某种情况下 某些时候不会过期 比如疫情卖口罩时期</p>
 <blockquote>
 <p>在数据库一条数据里面添加一个          “expire”: 153213455</p>
 </blockquote>
@@ -1388,7 +1388,7 @@ select * from t_user where id &lt; 5
 <pre><code class="java">@Service
 @Scope(&quot;singleton&quot;)
 public class UserServiceImpl implements UserService&#123;
-    
+
 &#125;
 </code></pre>
 <ul>
@@ -1403,7 +1403,7 @@ public class UserController&#123;
 
     @Autowired
     private UserService userService;
-    
+
     @GetMapping(&quot;/getById/&#123;id&#125;&quot;)
     public User getById(@PathVariable(&quot;id&quot;) Integer id)&#123;
         count++;
@@ -1481,12 +1481,12 @@ void update(...) throw FileNotFoundException&#123;
 <p><img src="https://github.com/P-luminary/images/blob/master/Bean%E7%9A%84%E7%94%9F%E5%91%BD%E5%91%A8%E6%9C%9F.png?raw=true"></p>
 <p><span style = "color:red"><strong>Spring中的循环引用？</strong></span></p>
 <blockquote>
-<p>★ <strong>循环依赖</strong>：循环依赖其实就是循环引用, 也就是两个或两个以上的bean互相持有对方,最终形成闭环。比如A依赖于B,B依赖于A<br>★ 循环依赖在spring中是允许存在，spring框架**<u>依据三级缓存已经解决了大部分的循环依赖</u>**<br>  ☆ <strong>一级缓存</strong>：单例池，缓存已经经历了完整的生命周期，已经初始化完成的bean对象<br>  ☆ <strong>二级缓存</strong>：缓存早期的bean对象(生命周期还没走完)<br>  ☆ <strong>三级缓存</strong>：缓存的是ObjectFactory，表示对象工厂，用来创建某个对象的</p>
+<p>★ <strong>循环依赖</strong>：循环依赖其实就是循环引用, 也就是两个或两个以上的bean互相持有对方,最终形成闭环。比如A依赖于B,B依赖于A<br>★ 循环依赖在spring中是允许存在，spring框架**<u>依据三级缓存已经解决了大部分的循环依赖</u>**<br>☆ <strong>一级缓存</strong>：单例池，缓存已经经历了完整的生命周期，已经初始化完成的bean对象<br>☆ <strong>二级缓存</strong>：缓存早期的bean对象(生命周期还没走完)<br>☆ <strong>三级缓存</strong>：缓存的是ObjectFactory，表示对象工厂，用来创建某个对象的</p>
 </blockquote>
 <p><span style = "color:red"><strong>构造方法出现了循环依赖怎么解决？</strong></span></p>
 <blockquote>
 <p>A依赖于B，B依赖于A，注入的方式是构造函数<br><strong>原因</strong>：由于bean的生命周期中构造函数是第一个执行的，spring框架并不能解决构造函数的的依赖注入<br><strong>解决方案</strong>：使用@Lazy进行懒加载，什么时候需要对象再进行bean对象的创建</p>
-<p>public A(@Lazy B b){<br>    sout(“A的构造方法执行了”);<br>    this.b&#x3D;b;<br>}</p>
+<p>public A(@Lazy B b){<br> sout(“A的构造方法执行了”);<br> this.b&#x3D;b;<br>}</p>
 </blockquote>
 <blockquote>
 <p>@Component                                     @Component<br>public class A{          →      ←             public class B{<br>    @Autowired         ↑          ↑                 @Autowired<br>    private B b;       →↑          ↑←                private A a;<br>}                                                             } </p>
@@ -1496,11 +1496,11 @@ void update(...) throw FileNotFoundException&#123;
 <p><u>如果想打破循环依赖，就需要一个中间人的参与，这个中间人就是&#x3D;&#x3D;<strong>二级缓存</strong>&#x3D;&#x3D;</u><del>如果一个对象是代理对象(被增强了)就不行</del><br><img src="https://github.com/P-luminary/images/blob/master/%E4%BA%8C%E7%BA%A7%E7%BC%93%E5%AD%98%E8%A7%A3%E5%86%B3%E5%BE%AA%E7%8E%AF%E4%BE%9D%E8%B5%962.jpg?raw=true"></p>
 <p><u>针对如果是代理对象的话如何解决呢？</u> → &#x3D;&#x3D;<strong>三级缓存</strong>&#x3D;&#x3D;<br><img src="https://github.com/P-luminary/images/blob/master/%E4%B8%89%E6%AC%A1%E7%BC%93%E5%AD%98%E8%A7%A3%E5%86%B3%E5%BE%AA%E7%8E%AF%E4%BE%9D%E8%B5%96.jpg?raw=true"></p>
 <h6 id="那如果构造方法出现了循环依赖怎么解决？"><a href="#那如果构造方法出现了循环依赖怎么解决？" class="headerlink" title="那如果构造方法出现了循环依赖怎么解决？"></a>那如果构造方法出现了循环依赖怎么解决？</h6><blockquote>
-<p>@Component                                                                   @Component<br>public class A{                           →      ←                          public class B{<br>    private B b;                             ↑          ↑                             private A a;<br>    public A(B c){                       →↑          ↑←                        public B(A c){<br>          sout(“A的构造方法执行了”)                                          sout(“B的构造方法执行了”)<br>          this.b&#x3D;b;                                                                                 this.b&#x3D;b;<br>    }                                                                                               }<br>}                                                                                            } </p>
+<p>@Component                                                                   @Component<br>public class A{                           →      ←                          public class B{<br>    private B b;                             ↑          ↑                             private A a;<br>    public A(B c){                       →↑          ↑←                        public B(A c){<br>       sout(“A的构造方法执行了”)                                          sout(“B的构造方法执行了”)<br>       this.b&#x3D;b;                                                                                 this.b&#x3D;b;<br> }                                                                                               }<br>}                                                                                            } </p>
 <p>报错信息：Is there an unresolvable circular reference?<br>解决：<code>@Lazy </code> 延迟加载→什么时候需要对象的时候什么时候实例化对象</p>
 <pre><code class="java">public A(@Lazy B b)&#123;
-    sout(&quot;A的构造方法执行了&quot;);
-    this.b=b;
+ sout(&quot;A的构造方法执行了&quot;);
+ this.b=b;
 &#125;
 </code></pre>
 </blockquote>
@@ -1975,24 +1975,24 @@ import java.util.List;
 
 public class CustomLoadBalancerRule implements IRule &#123;
 
-    private IRule delegate = new RandomRule();  // 默认策略
+ private IRule delegate = new RandomRule();  // 默认策略
 
-    @Override
-    public Server choose(Object key) &#123;
-        // 在这里实现自己的负载均衡算法
-        // 比如，你可以使用 RoundRobin、Random 或者基于健康检查的策略
-        return delegate.choose(key);
-    &#125;
+ @Override
+ public Server choose(Object key) &#123;
+     // 在这里实现自己的负载均衡算法
+     // 比如，你可以使用 RoundRobin、Random 或者基于健康检查的策略
+     return delegate.choose(key);
+ &#125;
 
-    @Override
-    public void setLoadBalancer(ZoneAwareLoadBalancer&lt;?&gt; lb) &#123;
-        delegate.setLoadBalancer(lb);
-    &#125;
+ @Override
+ public void setLoadBalancer(ZoneAwareLoadBalancer&lt;?&gt; lb) &#123;
+     delegate.setLoadBalancer(lb);
+ &#125;
 
-    @Override
-    public ZoneAwareLoadBalancer&lt;?&gt; getLoadBalancer() &#123;
-        return delegate.getLoadBalancer();
-    &#125;
+ @Override
+ public ZoneAwareLoadBalancer&lt;?&gt; getLoadBalancer() &#123;
+     return delegate.getLoadBalancer();
+ &#125;
 &#125;
 </code></pre>
 <p>然后，你需要在 Spring 配置类或者启动类上注入该自定义的负载均衡策略。</p>
@@ -2002,10 +2002,10 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class RibbonConfig &#123;
 
-    @Bean
-    public IRule customLoadBalancerRule() &#123;
-        return new CustomLoadBalancerRule();
-    &#125;
+ @Bean
+ public IRule customLoadBalancerRule() &#123;
+     return new CustomLoadBalancerRule();
+ &#125;
 &#125;
 </code></pre>
 </blockquote>
@@ -2085,7 +2085,7 @@ public class RibbonConfig &#123;
 </li>
 <li><strong>业务优先级：</strong> 对于不同的业务请求，可能需要有不同的限流策略，优先保证核心功能的可用性。</li>
 <li><strong>用户体验：</strong> 限流策略应尽量减少对用户体验的影响，例如通过友好的错误提示或降级方案。</li>
-<li><strong>数据监控：</strong> 实时监控系统的QPS和其他关键指标，以便快速响应并调整限流策略。<br>综上所述，限流是确保系统在高并发情况下稳定运行的重要措施，而了解系统的最大承受QPS是制定合理限流策略的基础。</li>
+<li><strong>数据监控：</strong> 实时监控系统的QPS和其他关键指标，以便快速响应并调整限流策略。<br> 综上所述，限流是确保系统在高并发情况下稳定运行的重要措施，而了解系统的最大承受QPS是制定合理限流策略的基础。</li>
 </ul>
 </blockquote>
 <p>为什么要限流？</p>
@@ -3936,7 +3936,7 @@ public class ThreadPoolExample &#123;
         ArrayBlockingQueue&lt;Runnable&gt; workQueue = new ArrayBlockingQueue&lt;&gt;(100);
         // 线程工厂 - 可以定制线程对象的创建，例如设置线程名字、是否是守护线程等
         ThreadFactory threadFactory = new ThreadFactory;
-        // 拒绝策略 - 当所有线程豆繁忙，workQueue也繁忙时，会触发拒绝策略
+        // 拒绝策略 - 当所有线程都繁忙，workQueue也繁忙时，会触发拒绝策略
         RejectedExecutionHandler handler = new RejectedExecutionHandler;
         
         // 创建线程池
@@ -4358,10 +4358,10 @@ WeakReference weakReference = new WeakReference(user)
 <p>延申话题：ThreadLocal内存泄露问题</p>
 <pre><code class="java">static class Entry extends WeakReference&lt;ThreadLocal&lt;?&gt;&gt;&#123;
     Object value;
-    Entry(ThreadLocal&lt;?&gt;k, Object v)&#123;
-        super(k); // k是弱引用
-        value = v; // 强引用，不会被回收
-    &#125;
+ Entry(ThreadLocal&lt;?&gt;k, Object v)&#123;
+     super(k); // k是弱引用
+     value = v; // 强引用，不会被回收
+ &#125;
 &#125;
 </code></pre>
 </blockquote>
@@ -4793,6 +4793,27 @@ jmap -dump:format=b,file=heap.hprof pid 【只有在项目运行时候才可以�
 <h6 id="扫码"><a href="#扫码" class="headerlink" title="扫码"></a>扫码</h6><p>PC端和后端会建立一个轮询的请求，不断的根据二维码ID去查询二维码状态，一旦状态改变页面也会改变。也可以通过长连接<strong>WebSocket</strong>获取状态 <code>淘宝用的轮询、抖音用的长连接</code>，此时就可以扫码。<br>扫码前保证手机是登录状态 没有登录肯定是不能扫码的，登录后进行扫码就会携带手机端的用户token以及二维码的ID在后端去校验请求Token，如果校验成功就代表手机可以登录，此时可以变更二维码状态为扫描。前端就可以根据这个把页面变为<code>待确认</code>状态</p>
 <p><span style = "color:red"><strong>如何设计分布式日志存储架构？</strong></span></p>
 <p><img src="https://raw.githubusercontent.com/P-luminary/images/38bcadd4a99fd1093a4d7ab6e39c60340bfc73a8/%E5%A6%82%E4%BD%95%E8%AE%BE%E8%AE%A1%E5%88%86%E5%B8%83%E5%BC%8F%E6%97%A5%E5%BF%97%E5%AD%98%E5%82%A8%E6%9E%B6%E6%9E%84.png"></p>
+<p><span style = "color:red"><strong>使用redis出现缓存三兄弟如何解决？</strong></span><del>减轻数据库的压力</del></p>
+<p><span style = "color:blue"><strong>你在项目中用到了Redis对吧 介绍一下有没有遇到关于redis的什么问题？</strong></span></p>
+<p>暂时还没看！<br><a target="_blank" rel="noopener" href="https://www.bilibili.com/video/BV176KpeiEXF?spm_id_from=333.788.videopod.episodes&vd_source=a4d980c3208d51858f08b3025a6ab2d9&p=12">12.使用redis出现缓存击穿雪崩穿透怎么解决_哔哩哔哩_bilibili</a></p>
+<p><span style = "color:red"><strong>如何使用Redis记录用户连续登录了多少天？</strong></span><del>放在数据库里不合适</del></p>
+<p>放在数据库不合适因为你要创建一个表 记录用户哪一天进行了签到 如果用户量很多就会很大的量</p>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/9db550cabe345faff24a1fccba0d9d0f5e59faf9/%E5%A6%82%E4%BD%95%E4%BD%BF%E7%94%A8Redis%E8%AE%B0%E5%BD%95%E7%94%A8%E6%88%B7%E8%BF%9E%E7%BB%AD%E7%99%BB%E5%BD%95%E4%BA%86%E5%A4%9A%E5%B0%91%E5%A4%A9.png"></p>
+<p><span style = "color:red"><strong>给你一亿个Redis keys统计双方的共同好友？</strong></span></p>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/a917027faf313dfaee955c52361c8f711309fb43/%E7%BB%99%E4%BD%A0%E4%B8%80%E4%BA%BF%E4%B8%AARedis%20keys%E7%BB%9F%E8%AE%A1%E5%8F%8C%E6%96%B9%E7%9A%84%E5%85%B1%E5%90%8C%E5%A5%BD%E5%8F%8B.png"></p>
+<p><span style = "color:red"><strong>如何做一亿用户实时积分排行榜？</strong></span></p>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/2be2ea44cfd98cb3669dcc098f4790f2ad0780d1/%E5%A6%82%E4%BD%95%E5%81%9A%E4%B8%80%E4%BA%BF%E7%94%A8%E6%88%B7%E5%AE%9E%E6%97%B6%E7%A7%AF%E5%88%86%E6%8E%92%E8%A1%8C%E6%A6%9C.png"></p>
+<p><span style = "color:red"><strong>内存200M读取1G文件并统计内容重复次数？<del>内存受限时</del></strong></span></p>
+<p>一次性读取肯定会OOM<br>可以根据缓冲区分块读取<br><img src="https://raw.githubusercontent.com/P-luminary/images/f791667943446b731b86a4123b2fc03c812dabf1/%E5%86%85%E5%AD%98200M%E8%AF%BB%E5%8F%961G%E6%96%87%E4%BB%B6%E5%B9%B6%E7%BB%9F%E8%AE%A1%E5%86%85%E5%AE%B9%E9%87%8D%E5%A4%8D%E6%AC%A1%E6%95%B0.png"></p>
+<p><span style = "color:red"><strong>查询200条数据耗时200ms，怎么在500ms内查询1000条数据？</strong></span></p>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/af425172c9777d99374c270ea1bb12daf6c9a886/%E6%9F%A5%E8%AF%A2200%E6%9D%A1%E6%95%B0%E6%8D%AE%E8%80%97%E6%97%B6200ms%EF%BC%8C%E6%80%8E%E4%B9%88%E5%9C%A8500ms%E5%86%85%E6%9F%A5%E8%AF%A21000%E6%9D%A1%E6%95%B0%E6%8D%AE.png"></p>
+<p><span style = "color:red"><strong>SpringBoot如果有百万数据插入怎么优化？</strong></span></p>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/819db0a99867d7dea55c079cd88561676d73d2cd/SpringBoot%E5%A6%82%E6%9E%9C%E6%9C%89%E7%99%BE%E4%B8%87%E6%95%B0%E6%8D%AE%E6%8F%92%E5%85%A5%E6%80%8E%E4%B9%88%E4%BC%98%E5%8C%96.png"></p>
+<p><span style = "color:red"><strong>SpringBoot可以同时处理多少请求？</strong></span></p>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/a3872a89aa8e4de272a70a38c33d71e854708610/SpringBoot%E5%8F%AF%E4%BB%A5%E5%90%8C%E6%97%B6%E5%A4%84%E7%90%86%E5%A4%9A%E5%B0%91%E8%AF%B7%E6%B1%82.png"></p>
+<p><span style = "color:red"><strong>volatile的应用场景？</strong></span></p>
+<p>为了保证我们并发编程的<strong>可见性</strong>和<strong>有序性</strong></p>
+<p><img src="https://raw.githubusercontent.com/P-luminary/images/7a43484ced62d5727e9d6636d98a72d5bc8e4306/volatile%E7%9A%84%E5%BA%94%E7%94%A8%E5%9C%BA%E6%99%AF.png"></p>
 <p><span style = "color:red"><strong>项目难点？</strong></span><del>四方保险——day11-数据中心：时序数据库、看板展示【实战】</del></p>
 <p>技术上的难点：<strong>时序数据库</strong>、<strong>看板展示</strong></p>
 
